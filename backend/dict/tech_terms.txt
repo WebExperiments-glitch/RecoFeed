@@ -1,0 +1,391 @@
+
+# ⚠️ 为什么必须有这个文件：
+# jieba 默认词典会把技术专有名词切碎，实测：
+#     llama.cpp  →  "llama" + "cpp"   ❌
+#     vector db  →  "vector" + "db"    ❌
+# 加载本词典后可正确识别为单个词。
+
+# 格式：词语 词频 词性（与 jieba 官方 userdict 格式一致）
+
+# ── AI / 机器学习 ──
+机器学习 10000 n
+深度学习 10000 n
+神经网络 10000 n
+大语言模型 10000 n
+大模型 10000 n
+生成式 10000 n
+扩散模型 10000 n
+强化学习 10000 n
+监督学习 10000 n
+无监督学习 10000 n
+迁移学习 10000 n
+联邦学习 10000 n
+模型微调 10000 n
+提示工程 10000 n
+知识图谱 10000 n
+自然语言处理 10000 n
+计算机视觉 10000 n
+语音识别 10000 n
+语音合成 10000 n
+目标检测 10000 n
+图像分割 10000 n
+特征工程 10000 n
+注意力机制 10000 n
+transformer 10000 eng
+llama.cpp 10000 eng
+llama 10000 eng
+模型量化 10000 n
+推理加速 10000 n
+向量检索 10000 n
+语义搜索 10000 n
+
+# ── 数据库 / 存储 ──
+向量数据库 10000 n
+关系型数据库 10000 n
+非关系型数据库 10000 n
+分布式数据库 10000 n
+时序数据库 10000 n
+键值存储 10000 n
+对象存储 10000 n
+数据仓库 10000 n
+数据湖 10000 n
+读写分离 10000 n
+分库分表 10000 n
+事务隔离 10000 n
+索引优化 10000 n
+慢查询 10000 n
+缓存穿透 10000 n
+缓存雪崩 10000 n
+
+# ── 架构 / 后端 ──
+微服务 10000 n
+单体架构 10000 n
+服务网格 10000 n
+服务发现 10000 n
+负载均衡 10000 n
+反向代理 10000 n
+网关 10000 n
+中间件 10000 n
+消息队列 10000 n
+事件驱动 10000 n
+领域驱动 10000 n
+高可用 10000 n
+高并发 10000 n
+限流 10000 n
+熔断 10000 n
+降级 10000 n
+幂等 10000 n
+灰度发布 10000 n
+蓝绿部署 10000 n
+容器化 10000 n
+编排 10000 n
+声明式 10000 n
+无服务器 10000 n
+边缘计算 10000 n
+云原生 10000 n
+
+# ── 前端 ──
+前端框架 10000 n
+响应式布局 10000 n
+虚拟滚动 10000 n
+状态管理 10000 n
+组件库 10000 n
+设计系统 10000 n
+服务端渲染 10000 n
+静态站点 10000 n
+增量构建 10000 n
+热更新 10000 n
+打包工具 10000 n
+代码分割 10000 n
+懒加载 10000 n
+预加载 10000 n
+无障碍 10000 n
+毛玻璃 10000 n
+补间动画 10000 n
+关键帧 10000 n
+交互动效 10000 n
+
+# ── 工程实践 ──
+持续集成 10000 n
+持续部署 10000 n
+单元测试 10000 n
+集成测试 10000 n
+端到端测试 10000 n
+测试覆盖率 10000 n
+静态分析 10000 n
+代码审查 10000 n
+自动化测试 10000 n
+混沌工程 10000 n
+可观测性 10000 n
+链路追踪 10000 n
+日志聚合 10000 n
+性能剖析 10000 n
+内存泄漏 10000 n
+基准测试 10000 n
+
+# ── 安全 ──
+身份认证 10000 n
+权限控制 10000 n
+访问控制 10000 n
+加密算法 10000 n
+对称加密 10000 n
+非对称加密 10000 n
+数字签名 10000 n
+密钥管理 10000 n
+漏洞扫描 10000 n
+渗透测试 10000 n
+安全审计 10000 n
+越权访问 10000 n
+注入攻击 10000 n
+跨站脚本 10000 n
+跨站请求伪造 10000 n
+
+# ── 语言 / 运行时 ──
+编程语言 10000 n
+类型系统 10000 n
+垃圾回收 10000 n
+协程 10000 n
+异步编程 10000 n
+函数式编程 10000 n
+面向对象 10000 n
+元编程 10000 n
+编译原理 10000 n
+解释器 10000 n
+虚拟机 10000 n
+运行时 10000 n
+标准库 10000 n
+依赖注入 10000 n
+反射 10000 n
+
+# ── 数据 / 算法 ──
+推荐系统 10000 n
+协同过滤 10000 n
+内容推荐 10000 n
+用户画像 10000 n
+冷启动 10000 n
+召回 10000 n
+排序 10000 n
+重排 10000 n
+特征交叉 10000 n
+双塔模型 10000 n
+点击率预估 10000 n
+多目标优化 10000 n
+流量池 10000 n
+信息流 10000 n
+打散 10000 n
+去重 10000 n
+
+# ── 复合技术名（实测会被切碎的）──
+# ⚠️ 实测：这些词被 jieba 拆成无意义碎片后进入标签集，
+#    例如 bge-small → "bge" + "small"，污染画像。
+bge-small 10000 n
+bge-large 10000 n
+bge-base 10000 n
+text-embedding 10000 n
+sentence-transformer 10000 n
+llama.cpp 10000 n
+llama3 10000 n
+whisper.cpp 10000 n
+stable-diffusion 10000 n
+comfyui 10000 n
+auto1111 10000 n
+text-to-image 10000 n
+text-to-speech 10000 n
+speech-to-text 10000 n
+zero-shot 10000 n
+few-shot 10000 n
+fine-tuning 10000 n
+pre-trained 10000 n
+open-source 10000 n
+self-hosted 10000 n
+real-time 10000 n
+low-latency 10000 n
+high-performance 10000 n
+scalable 10000 n
+end-to-end 10000 n
+retrieval-augmented 10000 n
+chain-of-thought 10000 n
+mixture-of-experts 10000 n
+knowledge-distillation 10000 n
+vector-database 10000 n
+vector-search 10000 n
+semantic-search 10000 n
+graphql 10000 n
+websocket 10000 n
+restful 10000 n
+grpc 10000 n
+jwt 10000 n
+oauth 10000 n
+ssr 10000 n
+csr 10000 n
+orm 10000 n
+cli 10000 n
+sdk 10000 n
+api-gateway 10000 n
+load-balancer 10000 n
+rate-limit 10000 n
+
+# ── 防碎片词（英文单词）──
+# ⚠️ 实测根因：README 里的英文单词若不在 jieba 词典中，
+#    会被按字母切成残片。实测 "Supported" → "platf" + "orm"，
+#    两个残片都拿到 0.2717 的 TF-IDF 权重，直接污染标签。
+#    这里把高频英文技术词整词登记，避免被切。
+platform 10000 eng
+support 10000 eng
+supported 10000 eng
+supports 10000 eng
+performance 10000 eng
+implementation 10000 eng
+configuration 10000 eng
+documentation 10000 eng
+compatibility 10000 eng
+infrastructure 10000 eng
+architecture 10000 eng
+application 10000 eng
+applications 10000 eng
+development 10000 eng
+distribution 10000 eng
+optimization 10000 eng
+quantization 10000 eng
+parallelism 10000 eng
+concurrency 10000 eng
+dependency 10000 eng
+dependencies 10000 eng
+interface 10000 eng
+integration 10000 eng
+registration 10000 eng
+contribution 10000 eng
+declarative 10000 eng
+interactive 10000 eng
+progressive 10000 eng
+embedded 10000 eng
+distributed 10000 eng
+incremental 10000 eng
+continuous 10000 eng
+deserialize 10000 eng
+
+transformer 10000 eng
+transformers 10000 eng
+attention 10000 eng
+embedding 10000 eng
+embeddings 10000 eng
+tokenizer 10000 eng
+tokenization 10000 eng
+checkpoint 10000 eng
+fine-tuning 10000 eng
+pretrained 10000 eng
+pagedattention 10000 eng
+flash-attention 10000 eng
+radix-attention 10000 eng
+speculation 10000 eng
+benchmark 10000 eng
+benchmarks 10000 eng
+throughput 10000 eng
+latency 10000 eng
+inference 10000 eng
+serving 10000 eng
+compile 10000 eng
+compiler 10000 eng
+runtime 10000 eng
+renderer 10000 eng
+render 10000 eng
+profiler 10000 eng
+debugger 10000 eng
+container 10000 eng
+containers 10000 eng
+
+reactive 10000 eng
+reactivity 10000 eng
+reactivity 10000 eng
+component 10000 eng
+components 10000 eng
+repository 10000 eng
+virtualization 10000 eng
+virtualized 10000 eng
+encapsulated 10000 eng
+encapsulation 10000 eng
+reusability 10000 eng
+accessibility 10000 eng
+observability 10000 eng
+observable 10000 eng
+immutable 10000 eng
+interoperable 10000 eng
+extensible 10000 eng
+extensions 10000 eng
+extension 10000 eng
+contributing 10000 eng
+documented 10000 eng
+powered 10000 eng
+lightweight 10000 eng
+proprietary 10000 eng
+marketplace 10000 eng
+development 10000 eng
+demonstrations 10000 eng
+instructions 10000 eng
+automatically 10000 eng
+independently 10000 eng
+simultaneously 10000 eng
+
+# ── 中文方向词（补数据覆盖）──
+# ⚠️ 为什么补这些：
+#    实测用户搜「文生图」命中 0 条 —— 因为 jieba 把它切成「文生 / 图」，
+#    而库里的标签是 `diffusion` / `stable-diffusion`，对不上。
+#    把常用中文说法注册成词，jieba 才能整词切出并提成标签。
+#    这些词也会被 domain_terms.txt 加权，保证方向不丢。
+文生图 10000 n
+图生图 10000 n
+文生视频 10000 n
+语音合成 10000 n
+语音克隆 10000 n
+歌声合成 10000 n
+声音克隆 10000 n
+变声 10000 n
+声库 10000 n
+微调 10000 n
+量化 10000 n
+蒸馏 10000 n
+检索增强 10000 n
+向量检索 10000 n
+推理加速 10000 n
+本地部署 10000 n
+离线推理 10000 n
+
+
+# ── 语音 / 音频方向词（补数据覆盖）──
+# 实测：这些词在 README 里存在，但没注册时会被 jieba 切碎或漏提。
+rvc 10000 eng
+sovits 10000 eng
+vits 10000 eng
+tts 10000 eng
+voice-cloning 10000 eng
+voice-conversion 10000 eng
+speech-synthesis 10000 eng
+singing 10000 eng
+hubert 10000 eng
+
+# ── 扩散 / 图像生成方向词 ──
+diffusion 10000 eng
+stable-diffusion 10000 eng
+flux 10000 eng
+sdxl 10000 eng
+controlnet 10000 eng
+text-to-image 10000 eng
+image-generation 10000 eng
+
+# ── 中文方向词（补数据覆盖）──
+# 实测用户搜「文生图」命中 0 条 —— jieba 把它切成「文生 / 图」，
+# 而库里标签是 diffusion / stable-diffusion，对不上。
+# 注册成整词后，jieba 能整体切出并提成标签。
+文生图 10000 n
+图生图 10000 n
+文生视频 10000 n
+声音克隆 10000 n
+语音克隆 10000 n
+歌声合成 10000 n
+声音转换 10000 n
+变声器 10000 n
+模型微调 10000 n
+量化推理 10000 n
+本地部署 10000 n
+离线推理 10000 n
+检索增强 10000 n

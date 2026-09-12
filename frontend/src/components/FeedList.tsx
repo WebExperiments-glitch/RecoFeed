@@ -1,0 +1,164 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { FC } from 'react'
+import type { FeedItem, FeedMeta } from '@/types/api'
+import FeedCard from '@/components/FeedCard'
+import CardSkeleton from '@/components/CardSkeleton'
+import { trackImpression } from '@/lib/events'
+
+interface Props {
+  items: FeedItem[]
+  meta: FeedMeta | null
+  loading: boolean
+  userId: number
+  onOpenDetail: (item: FeedItem) => void
+  onDislike: (item: FeedItem) => void
+  /** 滑到接近底部时触发加载下一页 */
+  onReachEnd: () => void
+}
+
+/**
+ * Feed 主容器：竖向吸附滚动。
+ *
+ * 关键实现点：
+ *   ① scroll-snap 做「一次一张」的整屏吸附（CSS，不用 JS 计算，性能好）
+ *   ② IntersectionObserver 判定哪张卡是 active —— 它同时驱动
+ *      埋点计时和卡片高亮，比监听 scroll 事件便宜得多
+ *   ③ 接近底部时预加载，避免用户滑到底看到「加载中」
+ */
+const FeedList: FC<Props> = ({
+  items,
+  meta,
+  loading,
+  userId,
+  onOpenDetail,
+  onDislike,
+  onReachEnd,
+}) => {
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const cardEls = useRef<Map<number, HTMLDivElement>>(new Map())
+  const [activeIndex, setActiveIndex] = useState(0)
+  const impressedRef = useRef<Set<number>>(new Set())
+  const endedRef = useRef(false)
+
+  const registerEl = useCallback((index: number, el: HTMLDivElement | null) => {
+    if (el) cardEls.current.set(index, el)
+    else cardEls.current.delete(index)
+  }, [])
+
+  // ── 用 IntersectionObserver 判定 active 卡片 ──
+  useEffect(() => {
+    const root = scrollRef.current
+    if (!root || items.length === 0) return
+
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (!e.isIntersecting) continue
+          // 阈值 0.6：卡片大部分进入视口才算「正在看」
+          if (e.intersectionRatio < 0.6) continue
+          const idx = Number((e.target as HTMLElement).dataset.index)
+          if (!Number.isNaN(idx)) setActiveIndex(idx)
+        }
+      },
+      { root, threshold: [0.6], rootMargin: '0px' },
+    )
+
+    cardEls.current.forEach((el) => io.observe(el))
+    return () => io.disconnect()
+  }, [items])
+
+  // ── 曝光埋点：卡片首次成为 active 时报一次 ──
+  useEffect(() => {
+    const item = items[activeIndex]
+    if (!item) return
+    if (impressedRef.current.has(item.repo_id)) return
+    impressedRef.current.add(item.repo_id)
+    trackImpression(
+      item.repo_id,
+      activeIndex,
+      item.channels[0],
+      meta?.refill?.batch_id,
+    )
+  }, [activeIndex, items, meta])
+
+  // ── 接近底部 → 预加载 ──
+  useEffect(() => {
+    if (items.length === 0) return
+    const remain = items.length - 1 - activeIndex
+    if (remain <= 2 && !endedRef.current) {
+      endedRef.current = true
+      onReachEnd()
+      // 加载完成后解锁，允许下一次触发
+      window.setTimeout(() => {
+        endedRef.current = false
+      }, 800)
+    }
+  }, [activeIndex, items.length, onReachEnd])
+
+  // 列表被清空（如搜索/刷新）时重置埋点状态。
+  //
+  // ⚠️ 依赖写成 isEmpty 而不是 items.length：
+  //    用长度做依赖会在每次加载新页时都触发重置（长度变了），
+  //    导致 impressed 集合被清空、曝光重复上报。
+  //    真正需要重置的只有"从有内容变成没内容"这一次状态跃迁。
+  const isEmpty = items.length === 0
+  useEffect(() => {
+    if (!isEmpty) return
+    impressedRef.current.clear()
+    endedRef.current = false
+    setActiveIndex(0)
+    scrollRef.current?.scrollTo({ top: 0 })
+  }, [isEmpty])
+
+  if (loading && items.length === 0) {
+    return (
+      <div className="h-full w-full">
+        <CardSkeleton />
+      </div>
+    )
+  }
+
+  return (
+    <div
+      ref={scrollRef}
+      // ⚠️ 布局要点（踩过坑）：
+      //    overflow-y-auto 会产生滚动条，在 w-full 的卡片上会挤压宽度，
+      //    导致内容横向溢出被裁切。用 w-screen + max-w-full 锁定宽度，
+      //    再用 overscroll-contain 阻止滚动穿透到 body。
+      className="snap-feed h-full w-full max-w-full overflow-y-auto overflow-x-hidden
+                 overscroll-contain"
+      style={{ width: '100%', maxWidth: '100vw' }}
+    >
+      {items.map((item, i) => (
+        <FeedCard
+          key={`${item.repo_id}-${i}`}
+          item={item}
+          index={i}
+          batchId={meta?.refill?.batch_id}
+          userId={userId}
+          isActive={i === activeIndex}
+          onOpenDetail={onOpenDetail}
+          onDislike={onDislike}
+          onRegisterEl={registerEl}
+        />
+      ))}
+
+      {/* 列表末尾的加载指示 */}
+      <div className="snap-card h-[72px] w-full flex items-center justify-center">
+        {loading ? (
+          <span className="text-[12px] text-white/35 animate-pulse">
+            正在补充推荐…
+          </span>
+        ) : meta?.needs_refill ? (
+          <span className="text-[12px] text-white/30">
+            队列见底，正在按你的兴趣补货
+          </span>
+        ) : (
+          <span className="text-[12px] text-white/20">已经到底了</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export default FeedList

@@ -1,0 +1,128 @@
+# 自定义停用词表（纯文本，一行若干词，# 开头为注释）
+#
+# 为什么必须有：
+#   jieba 自带的 STOP_WORDS 只有约 30 个英文词（the/of/is/and/to...），
+#   中文停用词一个都没有，会把"的""我们""可以"等高频词当作关键词。
+#
+# 覆盖范围：中文虚词 + README 套话 + 英文语法词 + 中文语法词 + 切词碎片
+#
+# 实测根因：jieba 的 TF-IDF 只做词频统计，不给词性/领域加权。
+#   结果 running / large / Simple / Get / up 和 inference / GGUF
+#   拿到完全相同的权重（都是 0.2717），全部灌进 tags_json。
+#
+# 保守收词：只收"在任何技术语境下都不表方向"的通用词。
+#   不要收 string / index / memory / server / language / data / type
+#   它们在具体仓库里是有效标签（pgvector 的 index、sqlite 的 memory）。
+#   不要收 推理 / 生成 / 训练，它们在具体仓库里是有效方向词。
+
+# 中文虚词
+的 了 是 在 和 与 或 及 也 就 都 而 但 却 则 之 其 此 该 各 每 某
+我们 你们 他们 她们 它们 咱们 大家 自己 别人
+可以 需要 应该 必须 能够 可能 或许 也许 大概
+这个 那个 这些 那些 这里 那里 这样 那样 什么 哪些 哪里
+
+# README 常见套话
+介绍 简介 概述 说明 文档 项目 仓库 功能 特性 优势
+快速 开始 上手 安装 部署 配置 运行 使用 用法
+支持 提供 包含 基于 通过 采用 实现 完成 进行
+注意 参考 详见 例如 比如 另外 此外 同时 以及
+欢迎 感谢 贡献 许可 协议 版本 更新 变更 历史
+
+# 中文语法词（扩充）
+# 实测根因：与英文侧同源问题。jieba 的 TF-IDF 只统计词频，
+#   把"为什么 / 每个 / 某个 / 一步 / 直接 / 这种 / 其中"这类
+#   纯语法词按高频提了出来（实测 df 达 5~9），挤占了真技术词的位置。
+为什么 怎么 怎样 如何 什么 什么样
+这种 那种 哪种 哪个 哪些 哪里 哪儿
+只用 只会 只能 只要 只是 就是 还是 也是 都是 总是
+每个 某个 一个 一步 一次 一种 一样 一直 一定 一般
+其中 其它 其他 另外 而且 并且 或者 如果 假设
+直接 间接 自动 手动 简单 复杂 基本 主要 核心 重要
+
+# 流程 / 文档类通用词（扩充）
+# 实测：这些词在 AI 项目 README 里随处可见但不指向方向，
+#   却把方向词挤出了标签 Top5。
+#   证据：语音类仓库的标签被它们占据 ——
+#     retrieval-based-voice-conversion-webui
+#       → [index 0.37, 音色 0.35, 训练 0.31, 素材 0.21, rvc 0.18]
+#   结果补货方向变成 [embedding, llm, applications, gguf, database]。
+训练 素材 模块 原版 咬字 预处理 音色 语义
+工具 方案 场景 案例 示例 需求 问题 原因 目的 意义
+安装 部署 配置 运行 使用 支持 提供 实现 完成
+效果 性能 质量 速度 精度 数据 结果 内容 方式 方法
+开始 结束 输入 输出 保存 加载 读取 写入 修改 更新
+常见 主要 核心 基本 简单 复杂 完整 详细 具体 相关
+可能 需要 应该 可以 必须 建议 注意 参考 说明 介绍
+
+# 符号噪声（jieba 可能产出）
+- -- --- 。 ， 、 ； ： ！ ？ （ ） 【 】 《 》 
+
+# 英文停用词（扩充 jieba 默认表）
+a an the
+i you he she it we they
+me him her us them
+my your his its our their
+this that these those
+am is are was were be been being
+have has had do does did done
+will would shall should can could may might must
+of in on at to for with from by about into over after
+and or but if then than so as not no nor
+up down out off again further once here there when where why how
+all any both each few more most other some such only own same too very
+just also even still yet ever never always often sometimes
+get gets got getting make makes made use uses used using
+let lets run runs running see sees seen take takes taken
+give gives given come comes coming go goes going
+need needs needed want wants wanted
+like likes liked know knows known think thinks thought
+find finds found look looks looked work works working
+say says said tell tells told call calls called
+way ways thing things part parts kind kinds
+able above actually after again against already also
+although always among another anywhere around because before
+behind being below beside between beyond both during either
+else enough even ever every everything everywhere except
+first found four from full further generally given
+goes going gone had half has have having here herself
+himself how however ignore including instead itself
+keep kept known last later least less likely
+little long made many maybe mean means might
+much near needs neither never new next none nor
+not nothing now often once one only onto other others
+otherwise our ours ourselves out over own per perhaps
+please put quite rather really right said same saw
+saying seem seems seen several shall she should show
+shows shown since small some somebody someone something
+sometimes somewhat somewhere soon still such sure take
+taken takes than that thats their theirs them themselves
+then there therefore these they thing things think
+this those though thought three through throughout thus
+time times together too took toward towards two under
+until upon use used useful uses using usually various
+very via want wanted wants was way we well went
+were what whatever when where whether which while who
+whole whom whose why will with within without would
+yes yet you your yours yourself
+
+# 英文语法碎片（jieba 切词残留）
+# 实测被切碎的英文单词残片，无独立语义。
+# 典型案例：Supported → platf + orm（platform 不在 jieba 词典）
+platf orm ance ent atter alized ation ment ity ress
+transf struct func comp impl
+re ted ies tive ible able ful less ness
+
+# 英文通用技术噪声（扩充）
+# 这些词在技术文案里频率极高但不表方向。
+mini minimal simple fast quick easy light tiny
+string strings number numbers value values
+level levels form forms type types
+case cases item items step steps
+result results reason method methods
+process example examples
+
+# README 结构词（实测泄漏进画像）
+# 实测 features 会以高权重进标签 —— 它是 README 章节标题的常客，
+# 不表示任何技术方向。
+features feature overview summary highlights
+capabilities approach idea intro introduction

@@ -1,0 +1,633 @@
+"""FastAPI 路由。
+
+API 一览：
+    ── 基础 ──
+    GET  /api/health                  健康检查
+
+    ── 信息流（缓存池）──
+    GET  /api/feed                    拉取 Feed（队列优先，见底补货）
+    GET  /api/stats/queue             队列水位（调试/前端显示"还能刷几条"）
+    POST /api/queue/refill            手动补货（按画像定向抓取）
+    POST /api/queue/rebuild           重建队列（清空后按新画像重灌）
+
+    ── 搜索 ──
+    GET  /api/search                  搜索仓库（分页 / 筛选 / 排序）
+    GET  /api/search/suggest          搜索联想（语言 / 标签 / topics）
+    GET  /api/search/hot              热门搜索词
+
+    ── 互动 ──
+    POST /api/events                  批量上报埋点
+    POST /api/repos/{id}/like         点赞
+    DELETE /api/repos/{id}/like       取消点赞
+    POST /api/repos/{id}/star         收藏（同步 GitHub star 意图）
+    POST /api/repos/{id}/dislike      不感兴趣（梯度惩罚）
+    GET  /api/repos/{id}/comments     评论列表
+    POST /api/repos/{id}/comments     发表评论
+    GET  /api/repos/{id}              仓库详情
+
+    ── 用户 ──
+    GET  /api/user/profile            我的兴趣画像
+    POST /api/user/profile/rebuild    重建画像
+    GET  /api/user/events             行为流水（调试）
+
+    ── 调试 ──
+    GET  /api/stats/pool              流量池状态
+"""
+from __future__ import annotations
+
+import json
+import logging
+from typing import Any
+
+from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, Field
+
+from api.feed_service import build_feed, candidate_to_dict
+from api.search_service import hot as search_hot
+from api.search_service import search as search_repos
+from api.search_service import suggest as search_suggest
+from core.config import (
+    COLD_START_MIN_TAGS,
+    EVENT_WEIGHTS,
+    SEARCH_DEFAULT_LIMIT,
+    SEARCH_MAX_LIMIT,
+)
+from db.connection import get_conn
+from feed import queue as Q
+from feed.service import get_feed as get_queue_feed
+from feed.service import refill_queue
+from pool.state_machine import ensure_pool, record_event
+
+router = APIRouter(prefix="/api")
+
+
+# ------------------------------------------------------------------ 模型
+
+class EventIn(BaseModel):
+    repo_id: int
+    event_type: str
+    dwell_ms: int = 0
+    scroll_depth: float = 0.0
+    source_channel: str | None = None
+    batch_id: str | None = None
+    rank_position: int | None = None
+
+
+class EventBatch(BaseModel):
+    user_id: int = 1
+    events: list[EventIn] = Field(default_factory=list)
+
+
+class CommentIn(BaseModel):
+    user_id: int = 1
+    body: str
+
+
+class DislikeIn(BaseModel):
+    user_id: int = 1
+    # "repo" = 只屏蔽这个仓库；"category" = 梯度惩罚标签
+    reason: str = "category"
+
+
+# ------------------------------------------------------------------ 健康
+
+@router.get("/health")
+def health() -> dict[str, Any]:
+    with get_conn() as conn:
+        n_repos = conn.execute("SELECT COUNT(*) AS n FROM repos").fetchone()["n"]
+        n_users = conn.execute("SELECT COUNT(*) AS n FROM users").fetchone()["n"]
+    return {"status": "ok", "repos": n_repos, "users": n_users}
+
+
+# ------------------------------------------------------------------ Feed
+
+@router.get("/feed")
+def get_feed(
+    user_id: int = Query(1),
+    limit: int = Query(10, ge=1, le=50),
+    search: str | None = Query(None, description="搜索词（搜索干预）"),
+    session_languages: str | None = Query(
+        None, description="本次会话已出现的语言，逗号分隔"),
+    session_owners: str | None = Query(
+        None, description="本次会话已出现的作者，逗号分隔"),
+) -> dict[str, Any]:
+    """拉取 Feed。
+
+    ⭐ 走缓存池：从待刷队列取，见底自动补货，绝不空屏。
+       之前的实现是"每次请求实时跑完整推荐管线"，
+       有队列膨胀 / 刷完就没 / 每次重算三个问题。
+
+    ⚠️ 带 search 参数时会绕过队列，走实时搜索干预管线 ——
+       用户主动搜索是一次性诉求，不该消耗队列。
+       （独立的结果页搜索请用 /api/search）
+    """
+    langs = [s for s in (session_languages or "").split(",") if s]
+    owners = [s for s in (session_owners or "").split(",") if s]
+
+    with get_conn() as conn:
+        if search or langs or owners:
+            # 带会话上下文 / 搜索干预 → 走实时管线（需要看完整候选集）
+            result = build_feed(
+                conn, user_id,
+                limit=limit,
+                search_query=search,
+                session_languages=langs,
+                session_owners=owners,
+            )
+            items = [candidate_to_dict(c) for c in result["items"]]
+            return {"items": items, "meta": result["meta"]}
+
+        # 常规刷卡 → 缓存池
+        return get_queue_feed(conn, user_id, limit=limit)
+
+
+# ------------------------------------------------------------------ 队列
+
+@router.get("/stats/queue")
+def queue_stats(user_id: int = Query(1)) -> dict[str, Any]:
+    """队列水位（前端可用来显示"还剩 N 条待刷"）。"""
+    with get_conn() as conn:
+        stats = Q.queue_stats(conn, user_id)
+        stats["recent_refills"] = Q.recent_refills(conn, user_id, limit=5)
+    return stats
+
+
+class RefillIn(BaseModel):
+    user_id: int = 1
+    target: int | None = Field(None, description="补到多少条，默认 60")
+
+
+@router.post("/queue/refill")
+def manual_refill(payload: RefillIn | None = None) -> dict[str, Any]:
+    """手动触发补货（按用户画像定向抓取）。
+
+    用户点"换一批"时调用。有冷却时间，短时间内重复调用会被拒绝。
+    """
+    uid = payload.user_id if payload else 1
+    target = payload.target if payload else None
+    with get_conn() as conn:
+        info = refill_queue(conn, uid, trigger="manual", target=target)
+        # ⚠️ refill_queue 返回的键是 queue_after，统一成 queue_size 给前端
+        info["queue_size"] = Q.queue_size(conn, uid)
+        info["plan_summary"] = _plan_summary(info.get("plan"))
+        # 候选池不够时如实告知，避免前端以为"补满了"
+        if not info.get("refilled"):
+            info.setdefault("reason", "already_full")
+        elif not info.get("success", True):
+            info["partial"] = True
+            info["note"] = (f"候选池枯竭：目标 {target or 60} 条，"
+                            f"实际只补到 {info.get('enqueued', 0)} 条")
+        info.pop("plan", None)
+    return info
+
+
+@router.post("/queue/rebuild")
+def rebuild_queue(user_id: int = Query(1)) -> dict[str, Any]:
+    """清空队列并按当前画像重灌。
+
+    用于用户点了"重置推荐"、或画像大改之后。
+    """
+    with get_conn() as conn:
+        cleared = Q.clear_queue(conn, user_id)
+        info = refill_queue(conn, user_id, trigger="initial")
+        info["cleared"] = cleared
+        info["queue_size"] = Q.queue_size(conn, user_id)
+        info["plan_summary"] = _plan_summary(info.get("plan"))
+        if info.get("enqueued", 0) < 60:
+            info["partial"] = True
+            info["note"] = "候选池不足以灌满 60 条，已灌入全部可用仓库"
+        info.pop("plan", None)
+    return info
+
+
+def _plan_summary(plan: dict | None) -> str:
+    """把补货计划转成人话（前端提示用）。"""
+    if not plan:
+        return "无方向"
+    q = "、".join((plan.get("queries") or [])[:4]) or "无"
+    lang = "、".join(plan.get("languages") or []) or "无"
+    return f"方向：{q}｜语言：{lang}"
+
+
+# ------------------------------------------------------------------ 搜索
+
+@router.get("/search")
+def search(
+    q: str = Query("", description="搜索词"),
+    user_id: int = Query(1),
+    limit: int = Query(SEARCH_DEFAULT_LIMIT, ge=1, le=SEARCH_MAX_LIMIT),
+    offset: int = Query(0, ge=0, description="分页偏移"),
+    language: str | None = Query(None, description="按语言过滤"),
+    min_stars: int | None = Query(None, ge=0, description="最低 star 数"),
+    sort: str = Query("relevance",
+                      description="relevance | stars | recent | forgotten"),
+) -> dict[str, Any]:
+    """搜索仓库。
+
+    ⚠️ 这是真检索，不是"给推荐结果打分"：
+       全库扫描 + 按匹配度排序，与个性化无关。
+       原来的 /api/feed?search= 是给召回结果加分，
+       实测搜 "rust" 会返回 tailwindcss —— 因为候选池里就没有真匹配项。
+
+    排序说明：
+       relevance 相关度（默认）
+       stars     按 star 数
+       recent    最近更新
+       forgotten 遗珠优先（⭐ 本项目特色：帮你发现被埋没的好仓库）
+    """
+    if sort not in ("relevance", "stars", "recent", "forgotten"):
+        raise HTTPException(400, f"不支持的排序方式: {sort}")
+    with get_conn() as conn:
+        return search_repos(
+            conn, user_id, q,
+            limit=limit, offset=offset,
+            language=language, min_stars=min_stars, sort=sort,
+        )
+
+
+@router.get("/search/suggest")
+def search_suggest_api(
+    prefix: str = Query("", description="已输入的前缀"),
+    limit: int = Query(10, ge=1, le=30),
+) -> dict[str, Any]:
+    """搜索联想（搜索框实时下拉提示）。"""
+    with get_conn() as conn:
+        return search_suggest(conn, prefix, limit=limit)
+
+
+@router.get("/search/hot")
+def search_hot_api(limit: int = Query(10, ge=1, le=30)) -> dict[str, Any]:
+    """热门搜索词（空搜索框时的默认展示）。"""
+    with get_conn() as conn:
+        return search_hot(conn, limit=limit)
+
+
+# ------------------------------------------------------------------ 埋点
+
+@router.post("/events")
+def post_events(payload: EventBatch) -> dict[str, Any]:
+    """批量上报行为事件。
+
+    前端应至少上报：impression（曝光）、dwell_3s、read_readme、star_click。
+    """
+    accepted = 0
+    # ⭐ 只有"有价值"的事件才触发画像重建：
+    #    impression 只是曝光，不反映偏好；重建一次要遍历用户全部足迹，
+    #    每个曝光都重建会让接口变成 O(n²)。
+    profile_dirty = False
+
+    with get_conn() as conn:
+        for e in payload.events:
+            weight = EVENT_WEIGHTS.get(e.event_type, 0.0)
+
+            conn.execute(
+                """INSERT INTO user_events
+                   (user_id, repo_id, event_type, weight, dwell_ms,
+                    scroll_depth, source_channel, rank_position)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    payload.user_id, e.repo_id, e.event_type, weight,
+                    e.dwell_ms, e.scroll_depth, e.source_channel,
+                    e.rank_position,
+                ),
+            )
+
+            # 同步到流量池统计
+            if e.event_type not in ("impression",):
+                record_event(conn, e.repo_id, e.event_type)
+
+            if e.event_type in PROFILE_TRIGGER_EVENTS:
+                profile_dirty = True
+            accepted += 1
+
+        if profile_dirty:
+            _refresh_profile(conn, payload.user_id)
+
+    return {"accepted": accepted, "profile_rebuilt": profile_dirty}
+
+
+# 会改变用户画像的事件类型
+PROFILE_TRIGGER_EVENTS = frozenset({
+    "deep_read",      # 完整阅读 → 注意力圈
+    "star_click",     # 收藏 → 兴趣圈
+    "like", "unlike",
+    "dislike",        # 负反馈 → 惩罚项
+    "read_readme",
+})
+
+
+def _refresh_profile(conn, user_id: int) -> None:
+    """重建并落库用户画像（失败不阻断主流程）。"""
+    try:
+        from profile.service import rebuild_profile
+        rebuild_profile(conn, user_id)
+    except Exception:
+        logging.getLogger("recofeed").exception("画像重建失败 user=%s", user_id)
+
+
+# ------------------------------------------------------------------ 互动
+
+@router.post("/repos/{repo_id}/like")
+def like_repo(repo_id: int, user_id: int = Query(1)) -> dict[str, Any]:
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO likes (user_id, repo_id) VALUES (?, ?)",
+            (user_id, repo_id),
+        )
+        _log_event(conn, user_id, repo_id, "like")
+    return {"ok": True, "liked": True}
+
+
+@router.delete("/repos/{repo_id}/like")
+def unlike_repo(repo_id: int, user_id: int = Query(1)) -> dict[str, Any]:
+    with get_conn() as conn:
+        conn.execute(
+            "DELETE FROM likes WHERE user_id = ? AND repo_id = ?",
+            (user_id, repo_id),
+        )
+        _log_event(conn, user_id, repo_id, "unlike")
+    return {"ok": True, "liked": False}
+
+
+@router.post("/repos/{repo_id}/star")
+def star_repo(repo_id: int, user_id: int = Query(1)) -> dict[str, Any]:
+    """收藏 = 去 GitHub 点 star。
+
+    ⭐ 这是本系统权重最高的行为（对应抖音的"收藏率 25%"）。
+    """
+    with get_conn() as conn:
+        conn.execute(
+            """INSERT INTO stars (user_id, repo_id, gh_starred, synced_at)
+               VALUES (?, ?, 1, datetime('now'))
+               ON CONFLICT(user_id, repo_id)
+               DO UPDATE SET gh_starred = 1, synced_at = datetime('now')""",
+            (user_id, repo_id),
+        )
+        row = conn.execute(
+            "SELECT full_name FROM repos WHERE id = ?", (repo_id,)
+        ).fetchone()
+        _log_event(conn, user_id, repo_id, "star_click")
+        # 收藏是最强兴趣信号，立即重建画像
+        _refresh_profile(conn, user_id)
+
+    url = f"https://github.com/{row['full_name']}" if row else None
+    return {"ok": True, "starred": True, "github_url": url}
+
+
+@router.post("/repos/{repo_id}/dislike")
+def dislike_repo(repo_id: int, payload: DislikeIn) -> dict[str, Any]:
+    """不感兴趣。
+
+    reason="repo"     → 只屏蔽这个仓库，不动标签
+    reason="category" → 梯度惩罚标签（第1个-0.25，第2个-0.21... 保底0.05）
+    """
+    with get_conn() as conn:
+        # dwell_ms 复用：-1 表示"只屏蔽仓库"
+        marker = -1 if payload.reason == "repo" else 0
+        conn.execute(
+            """INSERT INTO user_events
+               (user_id, repo_id, event_type, weight, dwell_ms)
+               VALUES (?, ?, 'dislike', ?, ?)""",
+            (payload.user_id, repo_id,
+             -EVENT_WEIGHTS.get("skip", 2.0), marker),
+        )
+        affected = _penalized_tags(conn, repo_id, payload.reason) \
+            if payload.reason == "category" else []
+        # 负反馈改变画像的惩罚项，需要重建
+        _refresh_profile(conn, payload.user_id)
+
+    return {"ok": True, "reason": payload.reason, "penalized_tags": affected}
+
+
+def _penalized_tags(conn, repo_id: int, reason: str) -> list[dict]:
+    """计算被惩罚的标签（用于前端反馈展示）。"""
+    row = conn.execute(
+        "SELECT tags_json FROM repos WHERE id = ?", (repo_id,)
+    ).fetchone()
+    if not row or not row["tags_json"]:
+        return []
+    try:
+        tags = json.loads(row["tags_json"])
+    except (json.JSONDecodeError, TypeError):
+        return []
+
+    ranked = sorted(tags.items(), key=lambda kv: -float(kv[1]))[:5]
+    out = []
+    for rank, (tag, _) in enumerate(ranked):
+        amount = max(0.05, 0.25 - 0.04 * rank)
+        out.append({"tag": tag, "penalty": round(amount, 3)})
+    return out
+
+
+# ------------------------------------------------------------------ 评论
+
+@router.get("/repos/{repo_id}/comments")
+def list_comments(repo_id: int, limit: int = Query(50, ge=1, le=200)
+                  ) -> dict[str, Any]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT c.id, c.user_id, c.body, c.body_len, c.created_at,
+                      u.username
+               FROM comments c
+               LEFT JOIN users u ON u.id = c.user_id
+               WHERE c.repo_id = ?
+               ORDER BY c.created_at DESC LIMIT ?""",
+            (repo_id, limit),
+        ).fetchall()
+    return {"items": [dict(r) for r in rows]}
+
+
+@router.post("/repos/{repo_id}/comments")
+def post_comment(repo_id: int, payload: CommentIn) -> dict[str, Any]:
+    body = (payload.body or "").strip()
+    if not body:
+        raise HTTPException(status_code=400, detail="评论不能为空")
+
+    with get_conn() as conn:
+        cur = conn.execute(
+            """INSERT INTO comments (repo_id, user_id, body, body_len)
+               VALUES (?, ?, ?, ?)""",
+            (repo_id, payload.user_id, body, len(body)),
+        )
+        _log_event(conn, payload.user_id, repo_id, "comment")
+        cid = cur.lastrowid
+    # 评论深度（2026 算法看重）——15 字以上算优质评论
+    return {"ok": True, "id": cid, "depth": "quality" if len(body) >= 15
+            else "normal"}
+
+
+# ------------------------------------------------------------------ 详情
+
+@router.get("/repos/{repo_id}")
+def repo_detail(
+    repo_id: int,
+    user_id: int = Query(1),
+    with_readme: bool = Query(False, description="是否下发完整 README 正文"),
+) -> dict[str, Any]:
+    with get_conn() as conn:
+        row = conn.execute(
+            """SELECT r.*, p.current_pool, p.impressions, p.deep_rate,
+                      p.star_rate, p.ctr
+               FROM repos r
+               LEFT JOIN repo_pools p ON p.repo_id = r.id
+               WHERE r.id = ?""",
+            (repo_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="仓库不存在")
+
+        liked = conn.execute(
+            "SELECT 1 FROM likes WHERE user_id = ? AND repo_id = ?",
+            (user_id, repo_id),
+        ).fetchone() is not None
+
+        starred = conn.execute(
+            "SELECT 1 FROM stars WHERE user_id = ? AND repo_id = ?",
+            (user_id, repo_id),
+        ).fetchone() is not None
+
+    d = dict(row)
+    # ⚠️ 默认不下发 README（正文可达数十 KB，列表页用不到）。
+    #    详情页需要渲染 README 时显式传 with_readme=true。
+    if not with_readme:
+        d.pop("readme_md", None)
+    d["liked"] = liked
+    d["starred"] = starred
+    d["url"] = f"https://github.com/{row['full_name']}"
+    return d
+
+
+# ------------------------------------------------------------------ 画像
+
+@router.get("/user/profile")
+def user_profile(user_id: int = Query(1)) -> dict[str, Any]:
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM user_profiles WHERE user_id = ?", (user_id,)
+        ).fetchone()
+        n_events = conn.execute(
+            "SELECT COUNT(*) AS n FROM user_events WHERE user_id = ?",
+            (user_id,),
+        ).fetchone()["n"]
+        n_seen = conn.execute(
+            "SELECT COUNT(DISTINCT repo_id) AS n FROM feed_impressions "
+            "WHERE user_id = ?",
+            (user_id,),
+        ).fetchone()["n"]
+
+    if not row:
+        return {"user_id": user_id, "interests": [], "events": n_events,
+                "seen": n_seen, "cold_start": True}
+
+    def _parse(v):
+        try:
+            return json.loads(v) if v else []
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+    interests = _parse(row["top_topics"])
+    languages = _parse(row["top_languages"])
+
+    return {
+        "user_id": user_id,
+        "interests": interests,
+        "languages": languages,
+        "events": n_events,
+        "seen": n_seen,
+        "cold_start": len(interests) + len(languages) < 10,
+        "updated_at": row["updated_at"],
+    }
+
+
+@router.post("/user/profile/rebuild")
+def rebuild_user_profile(user_id: int = Query(1)) -> dict[str, Any]:
+    """强制重建用户画像（从三层足迹重新聚合）。
+
+    正常使用中画像会在 star / 深读 / 负反馈时自动重建，
+    这个接口用于调试，或在批量导入用户足迹后手动触发。
+    """
+    from profile.service import rebuild_profile
+
+    with get_conn() as conn:
+        tv = rebuild_profile(conn, user_id)
+        top = [{"tag": k, "weight": round(v, 4)} for k, v in tv.top(20)]
+        sources: dict[str, int] = {}
+        for tag, src in tv.sources.items():
+            for name in src:
+                sources[name] = sources.get(name, 0) + 1
+
+    return {
+        "ok": True,
+        "user_id": user_id,
+        "tags": len(tv.weights),
+        "top": top,
+        "by_source": sources,
+        "cold_start": tv.size < COLD_START_MIN_TAGS,
+    }
+
+
+@router.get("/user/events")
+def user_events(
+    user_id: int = Query(1),
+    limit: int = Query(50, ge=1, le=500),
+) -> dict[str, Any]:
+    """用户行为流水（调试用，便于前端核对埋点是否正确）。"""
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT e.event_type, e.weight, e.dwell_ms, e.scroll_depth,
+                      e.source_channel, e.rank_position, e.created_at,
+                      r.full_name
+               FROM user_events e
+               LEFT JOIN repos r ON r.id = e.repo_id
+               WHERE e.user_id = ?
+               ORDER BY e.created_at DESC, e.id DESC
+               LIMIT ?""",
+            (user_id, limit),
+        ).fetchall()
+        summary = conn.execute(
+            """SELECT event_type, COUNT(*) AS n
+               FROM user_events WHERE user_id = ?
+               GROUP BY event_type ORDER BY n DESC""",
+            (user_id,),
+        ).fetchall()
+
+    return {
+        "items": [dict(r) for r in rows],
+        "by_type": {r["event_type"]: r["n"] for r in summary},
+    }
+
+
+# ------------------------------------------------------------------ 调试
+
+@router.get("/stats/pool")
+def pool_stats() -> dict[str, Any]:
+    """流量池分布（调试用）。"""
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT current_pool, COUNT(*) AS n
+               FROM repo_pools GROUP BY current_pool
+               ORDER BY current_pool"""
+        ).fetchall()
+    names = {-1: "eliminated", 0: "cold", 1: "basic", 2: "mid",
+             3: "high", 4: "viral"}
+    return {
+        "distribution": [
+            {"level": r["current_pool"],
+             "name": names.get(r["current_pool"], "unknown"),
+             "count": r["n"]}
+            for r in rows
+        ]
+    }
+
+
+# ------------------------------------------------------------------ 内部
+
+def _log_event(conn, user_id: int, repo_id: int, event_type: str) -> None:
+    weight = EVENT_WEIGHTS.get(event_type, 0.0)
+    conn.execute(
+        """INSERT INTO user_events (user_id, repo_id, event_type, weight)
+           VALUES (?, ?, ?, ?)""",
+        (user_id, repo_id, event_type, weight),
+    )
+    record_event(conn, repo_id, event_type)
+    ensure_pool(conn, repo_id)

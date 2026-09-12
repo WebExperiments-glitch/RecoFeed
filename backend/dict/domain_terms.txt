@@ -1,0 +1,62 @@
+# 领域方向词表（Domain Terms）
+#
+# 用途：给"补货方向生成"做加权。
+#
+# ⚠️ 为什么需要这个文件：
+#    TF-IDF 只看词频，不知道哪个词"表征方向"。
+#    语音类仓库的实测标签：
+#      retrieval-based-voice-conversion-webui
+#        → [index 0.37, 音色 0.35, 训练 0.31, 素材 0.21, rvc 0.18]
+#      applio → [applio 0.33, rvc 0.33, 咬字 0.32, 训练 0.31, 推理 0.23]
+#    通用词把方向词挤出了 Top5，补货方向变成
+#    [embedding, llm, applications, gguf, database] —— 语音方向整个丢失，
+#    推给用户的内容 AI 匹配度只有 66%。
+#
+# 规则：命中本表的词，在生成补货方向时权重 ×1.8；
+#      并且允许突破"只取 Top5 标签"的限制（方向词单独留席位）。
+#
+# 格式：一行一个方向，`方向名: 词1 词2 词3 ...`
+#      中英文都小写匹配。
+
+# ── 语音 / 音频 / 歌声合成 ──
+speech: rvc sovits vits tts tts-oss voice voice-cloning voice-conversion
+speech: audio speech speech-synthesis singing hubert f0 clone cloning
+speech: realtime-voice 语音 声库 歌声 变声 音声 克隆 说话人 speaker
+speech: vocoder mel spectrogram 音素 韵律 声学 asr whisper
+
+# ── 大模型 / 推理 ──
+llm: llm llama llama.cpp gguf gpt mistral qwen phi gemma deepseek
+llm: inference quantization q4 q8 quantized kv-cache pagedattention
+llm: prompt token tokenizer context-window 推理 量化
+
+# ── 向量 / 检索 / RAG ──
+retrieval: embedding vector hnsw faiss pgvector qdrant milvus chroma
+retrieval: rag rerank recall semantic-search 向量 检索 召回
+
+# ── 扩散 / 图像生成 ──
+diffusion: diffusion stable-diffusion flux comfyui sd-webui lora controlnet
+diffusion: txt2img img2img 文生图 图像生成
+
+# ── 训练 / 微调 ──
+training: finetune fine-tuning lora qlora peft dreambooth trainer
+training: 微调 蒸馏 distillation
+
+# ── 前端 / UI ──
+frontend: react vue svelte nextjs tailwind vite sveltekit solid
+frontend: motion-in-css css-anim 组件 前端
+
+# ── 数据库 / 存储 ──
+database: sqlite postgres duckdb clickhouse redis litefs pgmq
+database: kv-store wal 数据库 存储
+
+# ── 系统 / 基础设施 ──
+infra: docker kubernetes k8s rust go c++ compiler runtime
+infra: wasm wasmtime sandbox system-call 系统 编译器
+
+# ── Agent / 编排 ──
+agent: agent agentic mcp tool-calling function-calling langchain dspy
+agent: workflow orchestration 编排 智能体
+
+# ── 安全 / 隐私 ──
+security: security auth oauth jwt encryption zero-trust e2ee
+security: blocklist tracker 隐私 安全

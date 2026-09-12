@@ -1,0 +1,19 @@
+# RecoFeed 后端依赖
+# 安装：pip install -r backend/requirements.txt
+
+# --- Web 框架 ---
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+pydantic>=2.7.0
+
+# --- 中文分词与标签提取 ---
+jieba>=0.42.1
+
+# --- HTTP 客户端（GitHub API 抓取）---
+httpx>=0.27.0
+
+# --- 定时任务（仓库爬取 / 画像重算）---
+apscheduler>=3.10.4
+
+# --- 测试 ---
+pytest>=8.0.0

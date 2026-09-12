@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<title>推流引擎设计 · 可编码版</title>
+<style>
+:root {
+  --bg-0:#05060a;
+  --glass: rgba(255,255,255,.055);
+  --glass-strong: rgba(255,255,255,.085);
+  --stroke: rgba(255,255,255,.11);
+  --stroke-hi: rgba(255,255,255,.22);
+  --txt: #eef1f7;
+  --txt-dim: #9aa3b6;
+  --txt-faint: #6b7488;
+  --accent: #6ea8ff;
+  --accent-2:#b98bff;
+  --ok:#3ddc97;
+  --warn:#ffc857;
+  --bad:#ff6b81;
+  --radius: 20px;
+  --blur: 22px;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC",
+          "HarmonyOS Sans SC", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+body {
+  margin:0; padding:0;
+  font-family: var(--sans);
+  background: var(--bg-0);
+  color: var(--txt);
+  line-height: 1.78;
+  font-size: 15.5px;
+  letter-spacing: .006em;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ============ 环境渐变光晕（Dark Glassmorphism 基底） ============ */
+.orbs { position: fixed; inset:0; z-index:0; pointer-events:none; overflow:hidden; }
+.orb { position:absolute; border-radius:50%; filter: blur(90px); opacity:.5;
+        animation: drift 26s ease-in-out infinite alternate; }
+.orb.a { width:52vw; height:52vw; background:radial-gradient(circle,#2d5bff,transparent 68%);
+          top:-14vw; left:-10vw; }
+.orb.b { width:46vw; height:46vw; background:radial-gradient(circle,#8b3dff,transparent 68%);
+          top:24vh; right:-14vw; animation-duration:32s; animation-delay:-6s; }
+.orb.c { width:40vw; height:40vw; background:radial-gradient(circle,#00c2a8,transparent 70%);
+          bottom:-12vw; left:26vw; animation-duration:38s; animation-delay:-14s; opacity:.34; }
+@keyframes drift {
+  from { transform: translate3d(0,0,0) scale(1); }
+  to   { transform: translate3d(4vw,5vh,0) scale(1.16); }
+}
+.grain { position:fixed; inset:0; z-index:1; pointer-events:none; opacity:.035;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E"); }
+
+/* ============ 布局 ============ */
+.shell { position:relative; z-index:2; max-width:1240px; margin:0 auto; padding: 0 22px 100px; }
+.layout { display:grid; grid-template-columns: 250px minmax(0,1fr); gap: 34px; align-items:start; }
+
+/* ============ 顶部 Hero ============ */
+.hero { padding: 74px 0 34px; }
+.badge {
+  display:inline-flex; align-items:center; gap:8px;
+  padding: 6px 14px; border-radius: 100px;
+  background: var(--glass); border:1px solid var(--stroke);
+  backdrop-filter: blur(var(--blur)); -webkit-backdrop-filter: blur(var(--blur));
+  font-size: 12.5px; color: var(--txt-dim); letter-spacing:.05em;
+  text-transform: uppercase; font-weight: 600;
+}
+.badge .dot { width:6px;height:6px;border-radius:50%;background:var(--ok);
+  box-shadow:0 0 10px var(--ok); animation: pulse 2.4s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+h1.title {
+  margin: 20px 0 0; font-size: clamp(30px, 4.6vw, 52px); font-weight: 700;
+  letter-spacing: -.028em; line-height: 1.14;
+  background: linear-gradient(96deg,#ffffff 6%, #9cc4ff 42%, #c9a6ff 74%, #7ee7d1 100%);
+  -webkit-background-clip:text; background-clip:text;
+  -webkit-text-fill-color: transparent;
+}
+.hero p.sub { margin: 18px 0 0; max-width: 660px; color: var(--txt-dim); font-size: 16px; }
+.hero .meta { margin-top: 26px; display:flex; flex-wrap:wrap; gap: 10px; }
+.chip { padding:5px 12px; border-radius:100px; font-size:12.5px; font-family: var(--mono);
+  background: var(--glass); border:1px solid var(--stroke); color: var(--txt-dim); }
+
+/* ============ 侧边目录 ============ */
+.side { position: sticky; top: 22px; }
+.side-inner {
+  padding: 18px 16px; border-radius: var(--radius);
+  background: var(--glass); border:1px solid var(--stroke);
+  backdrop-filter: blur(var(--blur)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(160%);
+}
+.side h4 { margin:0 0 12px; font-size:11.5px; letter-spacing:.13em; text-transform:uppercase;
+  color: var(--txt-faint); font-weight:700; }
+.toc-link { display:block; padding: 7px 10px; margin: 1px 0; border-radius: 10px;
+  color: var(--txt-dim); text-decoration:none; font-size: 13.2px; line-height:1.45;
+  transition: background .18s ease, color .18s ease, transform .18s ease; }
+.toc-link:hover { background: var(--glass-strong); color: var(--txt); transform: translateX(3px); }
+
+/* ============ 主内容玻璃卡 ============ */
+.main {
+  padding: 40px 42px 52px; border-radius: 26px;
+  background: linear-gradient(160deg, rgba(255,255,255,.072), rgba(255,255,255,.032));
+  border:1px solid var(--stroke);
+  backdrop-filter: blur(26px) saturate(165%);
+  -webkit-backdrop-filter: blur(26px) saturate(165%);
+  box-shadow: 0 28px 80px -28px rgba(0,0,0,.85), inset 0 1px 0 rgba(255,255,255,.09);
+}
+
+/* ============ 排版 ============ */
+.main h2 {
+  margin: 62px 0 20px; padding-top: 26px; font-size: 25px; font-weight: 700;
+  letter-spacing: -.018em; line-height:1.3;
+  border-top: 1px solid var(--stroke);
+  scroll-margin-top: 24px;
+}
+.main h2:first-of-type { margin-top: 12px; border-top: none; padding-top:0; }
+.main h3 { margin: 40px 0 14px; font-size: 18.5px; font-weight: 660; scroll-margin-top:24px; }
+.main h3::before { content:''; display:inline-block; width:4px; height:15px; border-radius:3px;
+  background: linear-gradient(180deg,var(--accent),var(--accent-2)); margin-right:10px;
+  transform: translateY(-1px); }
+.main h4 { margin: 26px 0 10px; font-size: 15.5px; color: var(--accent); font-weight:640; }
+.main p { margin: 13px 0; color: #d8dde9; }
+.main a { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(110,168,255,.32);
+  transition: border-color .2s, color .2s; }
+.main a:hover { border-bottom-color: var(--accent); color:#a9caff; }
+strong { color:#fff; font-weight: 660; }
+
+/* ============ 引用块 ============ */
+blockquote {
+  margin: 20px 0; padding: 16px 20px 16px 22px;
+  border-left: 3px solid transparent;
+  border-image: linear-gradient(180deg,var(--accent),var(--accent-2)) 1;
+  border-radius: 0 14px 14px 0;
+  background: rgba(110,168,255,.062);
+  color: #cbd4e6; font-size: 14.6px;
+}
+blockquote p { margin: 7px 0; color:#cbd4e6; }
+blockquote p:first-child { margin-top:0; } blockquote p:last-child { margin-bottom:0; }
+
+/* ============ 表格 ============ */
+.table-scroll { overflow-x:auto; margin: 20px 0; border-radius: 15px;
+  border:1px solid var(--stroke); background: rgba(255,255,255,.022);
+  -webkit-overflow-scrolling: touch; }
+.table-scroll::-webkit-scrollbar { height: 8px; }
+.table-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,.16); border-radius:4px; }
+table { border-collapse: collapse; width: 100%; min-width: 520px; font-size: 14px; }
+thead th {
+  background: rgba(255,255,255,.058); color:#fff; font-weight:640;
+  padding: 12px 15px; text-align: left; white-space: nowrap;
+  border-bottom: 1px solid var(--stroke-hi); font-size: 13.4px;
+}
+tbody td { padding: 11px 15px; border-bottom: 1px solid rgba(255,255,255,.055);
+  color: #ccd4e3; vertical-align: top; }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr { transition: background .16s ease; }
+tbody tr:hover { background: rgba(255,255,255,.036); }
+td code, th code { font-size: 12.6px; }
+
+/* ============ 代码 ============ */
+code { font-family: var(--mono); font-size: 13px;
+  background: rgba(255,255,255,.075); padding: 2px 6px; border-radius: 6px;
+  color: #b9d4ff; border:1px solid rgba(255,255,255,.055); }
+.code-wrap { position: relative; margin: 20px 0; border-radius: 15px; overflow: hidden;
+  border:1px solid var(--stroke); background: rgba(0,0,0,.42); }
+.code-wrap pre { margin:0; padding: 18px 20px; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+.code-wrap pre code { background:none; border:none; padding:0; color:#cfd9ea;
+  font-size: 13px; line-height: 1.72; display:block; white-space: pre; }
+.code-lang { position:absolute; top:0; right:0; padding: 4px 12px; font-size:10.5px;
+  letter-spacing:.09em; text-transform:uppercase; font-family: var(--mono);
+  color: var(--txt-faint); background: rgba(255,255,255,.06);
+  border-radius: 0 0 0 10px; border-left:1px solid var(--stroke);
+  border-bottom:1px solid var(--stroke); }
+.code-wrap::-webkit-scrollbar { height:8px; }
+.code-wrap::-webkit-scrollbar-thumb { background: rgba(255,255,255,.15); border-radius:4px; }
+
+/* ============ 列表 ============ */
+.main ul, .main ol { margin: 14px 0; padding-left: 26px; }
+.main li { margin: 7px 0; color:#d3dae7; }
+.main li::marker { color: var(--accent); }
+.main ul li input[type=checkbox] { margin-right:7px; accent-color: var(--ok); }
+
+/* ============ 分割线 ============ */
+hr { border: none; height: 1px; margin: 42px 0;
+  background: linear-gradient(90deg, transparent, var(--stroke-hi), transparent); }
+
+/* ============ 脚注 ============ */
+.fn-ref a { text-decoration:none; font-size: 11px; padding: 1px 4px; border-radius:5px;
+  background: rgba(110,168,255,.18); border:none; color:#a9caff; font-family:var(--mono); }
+.fn-ref a:hover { background: rgba(110,168,255,.34); }
+.footnotes { margin-top: 56px; padding-top: 26px; border-top:1px solid var(--stroke); }
+.footnotes h2 { border:none; padding:0; margin:0 0 16px; font-size: 19px; }
+.footnotes ol { padding-left: 22px; }
+.footnotes li { font-size: 13.4px; color: var(--txt-dim); margin: 10px 0; line-height:1.7; }
+.footnotes a { word-break: break-all; }
+.fn-back { text-decoration:none; border:none !important; opacity:.5; margin-left:5px; }
+
+/* ============ 入场动画（仅 GPU 四属性） ============ */
+.reveal { opacity:0; transform: translate3d(0,22px,0);
+  animation: rise .68s cubic-bezier(.2,.7,.3,1) forwards; }
+@keyframes rise { to { opacity:1; transform: translate3d(0,0,0); } }
+.main > * { opacity:0; transform: translate3d(0,14px,0);
+  animation: rise .55s cubic-bezier(.2,.7,.3,1) forwards; }
+.main > *:nth-child(1) { animation-delay: 0.028s; }.main > *:nth-child(2) { animation-delay: 0.056s; }.main > *:nth-child(3) { animation-delay: 0.084s; }.main > *:nth-child(4) { animation-delay: 0.112s; }.main > *:nth-child(5) { animation-delay: 0.140s; }.main > *:nth-child(6) { animation-delay: 0.168s; }.main > *:nth-child(7) { animation-delay: 0.196s; }.main > *:nth-child(8) { animation-delay: 0.224s; }.main > *:nth-child(9) { animation-delay: 0.252s; }.main > *:nth-child(10) { animation-delay: 0.280s; }.main > *:nth-child(11) { animation-delay: 0.308s; }.main > *:nth-child(12) { animation-delay: 0.336s; }.main > *:nth-child(13) { animation-delay: 0.364s; }.main > *:nth-child(14) { animation-delay: 0.392s; }.main > *:nth-child(15) { animation-delay: 0.420s; }.main > *:nth-child(16) { animation-delay: 0.448s; }.main > *:nth-child(17) { animation-delay: 0.476s; }.main > *:nth-child(18) { animation-delay: 0.504s; }.main > *:nth-child(19) { animation-delay: 0.532s; }.main > *:nth-child(20) { animation-delay: 0.560s; }.main > *:nth-child(21) { animation-delay: 0.588s; }.main > *:nth-child(22) { animation-delay: 0.600s; }.main > *:nth-child(23) { animation-delay: 0.600s; }.main > *:nth-child(24) { animation-delay: 0.600s; }.main > *:nth-child(25) { animation-delay: 0.600s; }.main > *:nth-child(26) { animation-delay: 0.600s; }.main > *:nth-child(27) { animation-delay: 0.600s; }.main > *:nth-child(28) { animation-delay: 0.600s; }.main > *:nth-child(29) { animation-delay: 0.600s; }.main > *:nth-child(30) { animation-delay: 0.600s; }.main > *:nth-child(31) { animation-delay: 0.600s; }.main > *:nth-child(32) { animation-delay: 0.600s; }.main > *:nth-child(33) { animation-delay: 0.600s; }.main > *:nth-child(34) { animation-delay: 0.600s; }.main > *:nth-child(35) { animation-delay: 0.600s; }.main > *:nth-child(36) { animation-delay: 0.600s; }.main > *:nth-child(37) { animation-delay: 0.600s; }.main > *:nth-child(38) { animation-delay: 0.600s; }.main > *:nth-child(39) { animation-delay: 0.600s; }.main > *:nth-child(40) { animation-delay: 0.600s; }.main > *:nth-child(41) { animation-delay: 0.600s; }.main > *:nth-child(42) { animation-delay: 0.600s; }.main > *:nth-child(43) { animation-delay: 0.600s; }.main > *:nth-child(44) { animation-delay: 0.600s; }.main > *:nth-child(45) { animation-delay: 0.600s; }.main > *:nth-child(46) { animation-delay: 0.600s; }.main > *:nth-child(47) { animation-delay: 0.600s; }.main > *:nth-child(48) { animation-delay: 0.600s; }.main > *:nth-child(49) { animation-delay: 0.600s; }.main > *:nth-child(50) { animation-delay: 0.600s; }.main > *:nth-child(51) { animation-delay: 0.600s; }.main > *:nth-child(52) { animation-delay: 0.600s; }.main > *:nth-child(53) { animation-delay: 0.600s; }.main > *:nth-child(54) { animation-delay: 0.600s; }.main > *:nth-child(55) { animation-delay: 0.600s; }.main > *:nth-child(56) { animation-delay: 0.600s; }.main > *:nth-child(57) { animation-delay: 0.600s; }.main > *:nth-child(58) { animation-delay: 0.600s; }.main > *:nth-child(59) { animation-delay: 0.600s; }.main > *:nth-child(60) { animation-delay: 0.600s; }.main > *:nth-child(61) { animation-delay: 0.600s; }.main > *:nth-child(62) { animation-delay: 0.600s; }.main > *:nth-child(63) { animation-delay: 0.600s; }.main > *:nth-child(64) { animation-delay: 0.600s; }.main > *:nth-child(65) { animation-delay: 0.600s; }.main > *:nth-child(66) { animation-delay: 0.600s; }.main > *:nth-child(67) { animation-delay: 0.600s; }.main > *:nth-child(68) { animation-delay: 0.600s; }.main > *:nth-child(69) { animation-delay: 0.600s; }.main > *:nth-child(70) { animation-delay: 0.600s; }.main > *:nth-child(71) { animation-delay: 0.600s; }.main > *:nth-child(72) { animation-delay: 0.600s; }.main > *:nth-child(73) { animation-delay: 0.600s; }.main > *:nth-child(74) { animation-delay: 0.600s; }.main > *:nth-child(75) { animation-delay: 0.600s; }.main > *:nth-child(76) { animation-delay: 0.600s; }.main > *:nth-child(77) { animation-delay: 0.600s; }.main > *:nth-child(78) { animation-delay: 0.600s; }.main > *:nth-child(79) { animation-delay: 0.600s; }.main > *:nth-child(80) { animation-delay: 0.600s; }.main > *:nth-child(81) { animation-delay: 0.600s; }.main > *:nth-child(82) { animation-delay: 0.600s; }.main > *:nth-child(83) { animation-delay: 0.600s; }.main > *:nth-child(84) { animation-delay: 0.600s; }.main > *:nth-child(85) { animation-delay: 0.600s; }.main > *:nth-child(86) { animation-delay: 0.600s; }.main > *:nth-child(87) { animation-delay: 0.600s; }.main > *:nth-child(88) { animation-delay: 0.600s; }.main > *:nth-child(89) { animation-delay: 0.600s; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+  .main > * { opacity:1; transform:none; }
+}
+
+/* ============ 响应式 ============ */
+@media (max-width: 1080px) {
+  .layout { grid-template-columns: 1fr; }
+  .side { display:none; }
+}
+@media (max-width: 680px) {
+  body { font-size: 15px; }
+  .shell { padding: 0 14px 70px; }
+  .hero { padding: 46px 0 22px; }
+  .main { padding: 26px 18px 34px; border-radius: 20px; }
+  .main h2 { font-size: 21px; margin-top: 46px; }
+  .main h3 { font-size: 17px; }
+  .code-wrap pre { padding: 14px; }
+  .code-wrap pre code { font-size: 12px; }
+  h1.title { font-size: 29px; }
+}
+
+/* 顶部渐隐遮罩，增强层次 */
+.top-fade { position:fixed; inset:0 0 auto 0; height:120px; z-index:3; pointer-events:none;
+  background: linear-gradient(180deg, rgba(5,6,10,.9), transparent); }
+
+/* 滚动进度条 */
+.progress { position: fixed; top:0; left:0; height:2px; z-index: 9; width:0;
+  background: linear-gradient(90deg,var(--accent),var(--accent-2),#7ee7d1);
+  box-shadow: 0 0 14px rgba(110,168,255,.75); transition: width .1s linear; }
+</style>
+</head>
+<body>
+<div class="orbs"><div class="orb a"></div><div class="orb b"></div><div class="orb c"></div></div>
+<div class="grain"></div>
+<div class="top-fade"></div>
+<div class="progress" id="bar"></div>
+
+<div class="shell">
+  <header class="hero">
+    <div class="badge"><span class="dot"></span>设计阶段 · v1.0</div>
+    <h1 class="title">推流引擎设计<br>抖音机制 → 代码</h1>
+    <p class="sub">
+      做一套仿抖音的信息流推流系统，但推的不是短视频，而是 <strong>GitHub 仓库</strong> ——
+      让那些无人访问、被遗忘的优质开源项目重新获得曝光。
+    </p>
+    <div class="meta">
+      <span class="chip">2026-09-11</span>
+      <span class="chip">10 个章节</span>
+      <span class="chip">17 个候选仓库</span>
+      <span class="chip">License 已逐个核实</span>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="side">
+      <nav class="side-inner">
+        <h4>目录</h4>
+        <a class="toc-link" href="#一-先把抖音的机制拆成-5-个可实现的部件">一、先把抖音的机制拆成 5 个可实现的部件</a><a class="toc-link" href="#二-流量池赛马机制-本项目最核心的原创设计">二、流量池赛马机制（本项目最核心的原创设计）</a><a class="toc-link" href="#三-多路召回设计-7-路">三、多路召回设计（7 路）</a><a class="toc-link" href="#四-打分公式-精排核心">四、打分公式（精排核心）</a><a class="toc-link" href="#五-重排阶段-抖音最精妙的一步">五、重排阶段（抖音最精妙的一步）</a><a class="toc-link" href="#六-冷启动方案-新用户-新仓库-老仓库">六、冷启动方案（新用户 + 新仓库 + 老仓库）</a><a class="toc-link" href="#七-代码结构骨架">七、代码结构骨架</a><a class="toc-link" href="#八-实施顺序建议-避开-半途而废">八、实施顺序建议（避开&quot;半途而废&quot;）</a><a class="toc-link" href="#九-避坑清单">九、避坑清单</a><a class="toc-link" href="#十-参考出处">十、参考出处</a>
+      </nav>
+    </aside>
+    <main class="main">
+<h1 id="_1">推流引擎设计文档（可编码版）</h1>
+<blockquote>
+<p>这是「抖音机制 → 代码」的翻译层。看完这篇可以直接开始写。
+配套文件：<code>schema.sql</code>（数据库）、<code>参考文献.md</code>（调研出处）</p>
+</blockquote>
+<hr />
+<h2 id="5">一、先把抖音的机制拆成 5 个可实现的部件</h2>
+<p>调研抖音推流机制后，能落地的就这 5 块，别被"玄学"吓住：</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>抖音机制</th>
+<th>我们的实现</th>
+<th>难度</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><strong>多路召回</strong>（协同过滤/内容/热点/关注）</td>
+<td>7 路并行召回 → 候选池</td>
+<td>⭐⭐</td>
+</tr>
+<tr>
+<td>2</td>
+<td><strong>排序公式</strong>：推荐得分 = 预测行为概率 × 行为价值权重</td>
+<td>加权打分函数</td>
+<td>⭐⭐⭐</td>
+</tr>
+<tr>
+<td>3</td>
+<td><strong>流量池赛马</strong>（逐级晋级）</td>
+<td>状态机 + 定时晋升任务</td>
+<td>⭐⭐⭐⭐ <strong>最难</strong></td>
+</tr>
+<tr>
+<td>4</td>
+<td><strong>重排打散</strong>（探索位/去重/疲劳度）</td>
+<td>重排规则</td>
+<td>⭐⭐</td>
+</tr>
+<tr>
+<td>5</td>
+<td><strong>实时行为回写</strong></td>
+<td>事件表 + 画像更新</td>
+<td>⭐</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>💡 <strong>重要认知</strong>：抖音 2026 的官方口径是
+<strong><code>推荐得分 = 预测用户行为概率 × 行为价值权重</code></strong>
+注意前半段是"预测"，不是"统计"。我们第一版做<strong>统计版</strong>（用历史实际率代替预测概率），第二版再接预测模型。<strong>不要一上来就上深度学习。</strong></p>
+</blockquote>
+<hr />
+<h2 id="_2">二、流量池赛马机制（本项目最核心的原创设计）</h2>
+<h3 id="21">2.1 抖音的流量池层级（多来源交叉验证）</h3>
+<table>
+<thead>
+<tr>
+<th>层级</th>
+<th>曝光量</th>
+<th>主要考核指标</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>冷启动池</td>
+<td>200–500（部分来源 300–1000）</td>
+<td>2秒/3秒留存、初始完播</td>
+</tr>
+<tr>
+<td>初级池</td>
+<td>3,000–5,000（1,000–5,000）</td>
+<td>完播率≥28~30%、原创度</td>
+</tr>
+<tr>
+<td>中级池</td>
+<td>1万–10万（5,000–3万）</td>
+<td>互动率、收藏率、转发率</td>
+</tr>
+<tr>
+<td>高级池</td>
+<td>10万–100万（3万–50万）</td>
+<td>转化率、留存时长</td>
+</tr>
+<tr>
+<td>爆款池</td>
+<td>100万+</td>
+<td>综合权重高于行业均值</td>
+</tr>
+</tbody>
+</table>
+<p><strong>赛马本质</strong>：同一时间段，系统把<strong>同标签</strong>内容放进流量池 PK 数据，胜出者晋级<sup class="fn-ref"><a href="#fn-1" id="fnref-1">1</a></sup><sup class="fn-ref"><a href="#fn-5" id="fnref-5">5</a></sup>。</p>
+<h3 id="22-github">2.2 ⭐ 迁移到 GitHub 仓库：这是全项目最关键的一步</h3>
+<p><strong>核心问题</strong>：视频是"一次性消费"，仓库是"长期资产"。仓库没有"完播率"这种天然指标。</p>
+<p><strong>我的方案</strong>：给每个仓库也建流量池，但<strong>晋级指标要重新定义</strong>：</p>
+<div class="code-wrap"><code>                        仓库进入候选池
+                              │
+                    ┌─────────▼─────────┐
+                    │  冷启动池 (quota 200) │
+                    │  考核：CTR + 3秒留存   │
+                    └─────────┬─────────┘
+                              │ ctr ≥ 0.06 且 not skip-heavy
+                    ┌─────────▼─────────┐
+                    │  初级池 (quota 2000)  │
+                    │  考核：深读率 ≥ 0.30   │  ← 等价&quot;完播率&quot;
+                    └─────────┬─────────┘
+                              │ deep_rate ≥ 0.30
+                    ┌─────────▼─────────┐
+                    │  中级池 (quota 2万)   │
+                    │  考核：star率 ≥ 0.03   │  ← 等价&quot;收藏率&quot;（最高权重）
+                    └─────────┬─────────┘
+                              │ star_rate ≥ 0.03 或 评论深度达标
+                    ┌─────────▼─────────┐
+                    │  高级池 (quota 20万)  │
+                    │  考核：综合分 + 长尾   │
+                    └─────────┬─────────┘
+                              │
+                          爆款池（全站）
+</code></pre></div>
+<p><strong>指标等价映射表</strong>（这是本项目的原创贡献）：</p>
+<table>
+<thead>
+<tr>
+<th>抖音指标</th>
+<th>权重(2026)</th>
+<th>我们的等价指标</th>
+<th>埋点定义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>收藏率</strong></td>
+<td><strong>25%（最高）</strong></td>
+<td><strong>star 转化率</strong></td>
+<td>点击「去 GitHub star」且真的跳转了 / 曝光数</td>
+</tr>
+<tr>
+<td>复访率</td>
+<td>高</td>
+<td><strong>重复访问率</strong></td>
+<td>同一用户 7 天内二次打开该仓库</td>
+</tr>
+<tr>
+<td>铁粉互动</td>
+<td>高</td>
+<td><strong>关注作者 / 高频用户互动</strong></td>
+<td>follow_owner 事件</td>
+</tr>
+<tr>
+<td>5秒完播</td>
+<td>中</td>
+<td><strong>3秒停留率</strong></td>
+<td>卡片停留 ≥3s / 曝光数</td>
+</tr>
+<tr>
+<td>整体完播</td>
+<td>中（已降权）</td>
+<td><strong>README 深读率</strong></td>
+<td>scroll_depth ≥ 0.5 / 曝光数</td>
+</tr>
+<tr>
+<td>评论质量</td>
+<td>中</td>
+<td><strong>评论长度 ≥15字</strong></td>
+<td>body_len 统计</td>
+</tr>
+<tr>
+<td>点赞</td>
+<td><strong>低（已降权）</strong></td>
+<td>网页端点赞</td>
+<td>like 事件</td>
+</tr>
+<tr>
+<td>转发</td>
+<td>低</td>
+<td>分享链接</td>
+<td>share 事件</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>🔑 <strong>反直觉但重要</strong>：抖音 2026 已经把 <strong>完播率从 35% 降到不足 10%</strong>，把 <strong>收藏率提到 25%</strong><sup class="fn-ref"><a href="#fn-3" id="fnref-3">3</a></sup><sup class="fn-ref"><a href="#fn-5" id="fnref-5">5</a></sup>。
+这对我们是<strong>天大的好消息</strong> —— 因为仓库的"收藏"就是 <strong>GitHub Star</strong>，而且 <strong>star 是可以真实校验的</strong>（比点赞更难刷，信号质量远高于抖音的收藏）。
+<strong>推论：我们的推流引擎应该以 Star 转化率为第一核心指标，而不是停留时长。</strong></p>
+</blockquote>
+<h3 id="23-7-2026">2.3 7 天长效赛马（2026 新规，必须抄）</h3>
+<p>抖音 2026 最大变化：<strong>从"24小时定生死"改成"7天长效推流"</strong><sup class="fn-ref"><a href="#fn-2" id="fnref-2">2</a></sup><sup class="fn-ref"><a href="#fn-5" id="fnref-5">5</a></sup>。</p>
+<div class="code-wrap"><code>阶段1（1-2天）：冷启动，考核 3 秒停留
+阶段2（3-4天）：二次激活，看收藏、复看
+阶段3（5-7天）：长尾爆发，铁粉+搜索流量加持
+</code></pre></div>
+<p><strong>对我们意味着什么</strong>：一个被遗忘 3 年的老仓库，只要<strong>开始被人收藏（star）、被人复访</strong>，就应该被重新推上去。</p>
+<blockquote>
+<p>⭐ <strong>这正好是"挖坟效应"的代码化</strong> —— 抖音用来救老视频，我们用来救<strong>老仓库</strong>。这是把抖音机制直接嫁接到你的核心诉求上，完美契合。</p>
+</blockquote>
+<p>配套要求：<strong>7 天内禁止删除/隐藏</strong>（抖音规则）。我们对应的是：<strong>晋级期内仓库不能被清理出池</strong>，且要有"复活"通路。</p>
+<hr />
+<h2 id="7">三、多路召回设计（7 路）</h2>
+<div class="code-wrap"><code>                        用户请求 Feed
+                              │
+    ┌─────────────────────────┼─────────────────────────┐
+    │  并行执行 7 路召回（各自取 Top-N，允许重叠）        │
+    └─────────────────────────┼─────────────────────────┘
+       │        │        │        │        │        │        │
+    ①兴趣    ②遗珠    ③热榜    ④新鲜    ⑤关注    ⑥探索    ⑦相似
+    召回     召回     召回     召回     召回     召回     召回
+   (主力)   (特色)            (新仓库)          (15%)
+       │        │        │        │        │        │        │
+       └────────┴────────┴────────┴────────┴────────┴────────┘
+                              │
+                       合并去重 → 候选池（~500）
+</code></pre></div>
+<h3 id="_3">各路实现细节</h3>
+<table>
+<thead>
+<tr>
+<th>通路</th>
+<th>面向</th>
+<th>查询逻辑</th>
+<th>配额</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>① <strong>兴趣召回</strong></td>
+<td>主力</td>
+<td>按 user_profiles.top_topics / top_languages 匹配 repos.topics/language</td>
+<td>150</td>
+</tr>
+<tr>
+<td>② <strong>遗珠召回</strong> ⭐</td>
+<td>本项目特色</td>
+<td><code>forgotten_score DESC</code> 且 曝光数 &lt; 阈值</td>
+<td>80</td>
+</tr>
+<tr>
+<td>③ <strong>热榜召回</strong></td>
+<td>大众</td>
+<td><code>velocity_score DESC</code>（<strong>Star增速</strong>，不是总 star）</td>
+<td>80</td>
+</tr>
+<tr>
+<td>④ <strong>新鲜召回</strong></td>
+<td>新仓库</td>
+<td><code>created_at_gh &gt; 7天前</code> 且 <code>quality_score &gt; 阈值</code></td>
+<td>60</td>
+</tr>
+<tr>
+<td>⑤ <strong>关注召回</strong></td>
+<td>老用户</td>
+<td><code>repos.owner IN (用户 follow 的 owner)</code></td>
+<td>40</td>
+</tr>
+<tr>
+<td>⑥ <strong>探索召回</strong></td>
+<td>所有人</td>
+<td>随机 + 多样性约束</td>
+<td>60</td>
+</tr>
+<tr>
+<td>⑦ <strong>相似召回</strong></td>
+<td>有历史</td>
+<td>item-based CF：「看了 A 的人也在看 B」</td>
+<td>60</td>
+</tr>
+</tbody>
+</table>
+<h3 id="sql">⭐ 遗珠召回的 SQL 骨架</h3>
+<div class="code-wrap"><span class="code-lang">sql</span><div class="code-wrap"><code class="language-sql"></div>-- 遗珠召回：找&quot;优质但被埋没&quot;的仓库
+SELECT r.*
+FROM repos r
+JOIN repo_pools p ON p.repo_id = r.id
+WHERE r.forgotten_score &gt; 0.5
+  AND p.impressions &lt; 500          -- 曝光少 = 被埋没
+  AND r.is_archived = 0
+  AND r.is_dead = 0
+  AND r.id NOT IN (
+      SELECT repo_id FROM feed_impressions
+      WHERE user_id = ? AND shown_at &gt; datetime('now','-7 day')
+  )
+ORDER BY r.forgotten_score DESC
+LIMIT 80;
+</code></pre></div>
+<hr />
+<h2 id="_4">四、打分公式（精排核心）</h2>
+<h3 id="41">4.1 主公式</h3>
+<div class="code-wrap"><span class="code-lang">python</span><div class="code-wrap"><code class="language-python"></div>def score_repo(user, repo, ctx, weights) -&gt; float:
+    &quot;&quot;&quot;
+    推荐得分 = 预测行为概率 × 行为价值权重
+    第一版用&quot;统计率&quot;代替&quot;预测概率&quot;
+    &quot;&quot;&quot;
+
+    # ── 第一项：多目标行为预估（迁移自 2026 抖音权重体系）──
+    eng = (
+        weights['w_star']      * repo.star_rate     +   # 收藏率 25% ← 最高
+        weights['w_deep_read'] * repo.deep_rate     +   # 深读率 35%
+        weights['w_comment']   * repo.comment_rate  +   # 评论   12%
+        weights['w_share']     * repo.share_rate    +   # 分享   10%
+        weights['w_like']      * repo.like_rate     +   # 点赞    8%  ← 已降权
+        weights['w_follow']    * repo.follow_rate       # 关注   10%
+    )
+
+    # ── 第二项：时效衰减（指数衰减，越新越占优）──
+    recency = exp(-weights['recency_decay'] * repo.hours_since_pushed / 24)
+
+    # ── 第三项：Star 增速加成（解决&quot;老仓库霸榜&quot;）──
+    velocity = log1p(repo.stars_per_day) * weights['velocity_boost']
+
+    # ── 第四项：⭐ 遗珠加成（本项目特色，与商业平台相反）──
+    forgotten = repo.forgotten_score * weights['forgotten_boost']
+
+    # ── 第五项：用户个性化匹配 ──
+    affinity = (
+        0.5 * topic_match(user.top_topics, repo.topics) +
+        0.3 * language_match(user.top_languages, repo.language) +
+        0.2 * owner_affinity(user.affinity_owners, repo.owner)
+    )
+
+    # ── 第六项：多样性惩罚（避免全是同一语言）──
+    penalty = diversity_penalty(ctx.session_languages, repo.language)
+
+    return (eng + velocity + forgotten) * recency * (1 + affinity) * penalty
+</code></pre></div>
+<h3 id="42-algo_config">4.2 参数默认值（已写入 <code>algo_config</code> 表，可热调）</h3>
+<div class="code-wrap"><code>w_deep_read   = 0.35    # 深读率（≈完播）
+w_star        = 0.25    # ⭐ star 转化（最高）
+w_comment     = 0.12
+w_share       = 0.10
+w_follow      = 0.10
+w_like        = 0.08    # 已降权
+recency_decay = 0.08
+velocity_boost  = 1.5
+forgotten_boost = 1.8   # ⭐
+explore_rate    = 0.15
+</code></pre></div>
+<h3 id="43-user_eventsweight">4.3 行为价值权重表（写进 <code>user_events.weight</code>）</h3>
+<div class="code-wrap"><span class="code-lang">python</span><div class="code-wrap"><code class="language-python"></div>EVENT_WEIGHTS = {
+    # 负反馈
+    &quot;skip&quot;:          -2.0,   # 划走 —— 强负信号
+    # 曝光（只作为分母）
+    &quot;impression&quot;:     0.0,
+    # 轻互动
+    &quot;view&quot;:           0.4,
+    &quot;dwell_3s&quot;:       0.8,   # 等价&quot;3秒留存&quot;
+    &quot;dwell_10s&quot;:      1.2,
+    &quot;dwell_30s&quot;:      1.8,
+    # 深度行为（等价&quot;完播&quot;）
+    &quot;read_readme&quot;:    2.5,   # scroll_depth ≥ 0.5
+    &quot;open_files&quot;:     3.0,   # 打开源码
+    &quot;open_issues&quot;:    2.0,
+    &quot;click_release&quot;:  2.5,
+    # 表态
+    &quot;like&quot;:           3.0,   # （已降权，低于 star）
+    &quot;comment&quot;:        5.0,
+    &quot;share&quot;:          5.0,
+    &quot;copy_link&quot;:      4.0,
+    # 转化 ⭐ 最高价值
+    &quot;star_click&quot;:     8.0,   # 去 GitHub 点星 ← 我们的&quot;收藏&quot;
+    &quot;follow_owner&quot;:   9.0,   # 关注作者 ← 最强正反馈
+}
+</code></pre></div>
+<hr />
+<h2 id="_5">五、重排阶段（抖音最精妙的一步）</h2>
+<h3 id="51">5.1 打散规则</h3>
+<p>调研结论<sup class="fn-ref"><a href="#fn-6" id="fnref-6">6</a></sup>：抖音重排会"每两个硬核内容中间插一个轻松内容，防止疲劳"，本质是 <strong>Explore vs Exploit</strong>。</p>
+<div class="code-wrap"><span class="code-lang">python</span><div class="code-wrap"><code class="language-python"></div>def rerank(candidates, user, n=20):
+    out, used_langs, used_owners = [], set(), set()
+
+    for i in range(n):
+        # 每 5 条插入 1 条探索内容（15% ≈ 3/20）
+        if i % 5 == 4:
+            pick = random_exploration(candidates, exclude=out)
+        else:
+            pick = best_valid(
+                candidates,
+                exclude=out,
+                # ⭐ 打散：同语言/同作者不能连续出现
+                ban_langs  = used_langs  if i&gt;=1 else set(),
+                ban_owners = used_owners if i&gt;=1 else set(),
+            )
+        if not pick: break
+        out.append(pick)
+        used_langs.add(pick.language)
+        used_owners.add(pick.owner)
+    return out
+</code></pre></div>
+<h3 id="52">5.2 去重窗口</h3>
+<div class="code-wrap"><span class="code-lang">sql</span><div class="code-wrap"><code class="language-sql"></div>-- 已曝光的不再推（窗口可配，默认 200 条 / 7 天）
+SELECT repo_id FROM feed_impressions
+WHERE user_id = ? AND shown_at &gt; datetime('now', '-7 day');
+</code></pre></div>
+<h3 id="53-2026">5.3 疲劳度衰减（2026 新增）</h3>
+<p>抖音 2026 模型引入了「<strong>用户疲劳度衰减因子</strong>」，对同质化内容降权<sup class="fn-ref"><a href="#fn-4" id="fnref-4">4</a></sup>。
+实现：统计用户最近 N 条曝光里各语言的占比，超阈值则乘惩罚系数。</p>
+<hr />
+<h2 id="_6">六、冷启动方案（新用户 + 新仓库 + 老仓库）</h2>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>问题</th>
+<th>方案</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>新用户</strong></td>
+<td>没有画像，不知道推什么</td>
+<td>「摸底 5 条」：推 5 个<strong>覆盖不同语言/领域的高质量仓库</strong>，快速建立初始画像。之后放开兴趣召回</td>
+</tr>
+<tr>
+<td><strong>新仓库</strong></td>
+<td>没有行为数据，协同过滤召回不到</td>
+<td>走 <strong>内容召回</strong>（topics + README embedding），不走 CF</td>
+</tr>
+<tr>
+<td><strong>老仓库</strong> ⭐</td>
+<td>star 少、无人问津</td>
+<td>走 <strong>遗珠召回</strong> + <strong>7天长效赛马复活通路</strong></td>
+</tr>
+<tr>
+<td><strong>无 star 快照</strong></td>
+<td>算不出 velocity</td>
+<td>降级公式：<code>log1p(stars) / (age_hours + 1)</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>冷启动判定</strong>（<code>users.is_new_user</code>）：<code>interest_count &lt; 10</code> 视为冷启动中。</p>
+<hr />
+<h2 id="_7">七、代码结构骨架</h2>
+<div class="code-wrap"><code>backend/
+├── app.py                    # FastAPI 入口
+├── config.py                 # 读 algo_config
+├── db/
+│   ├── schema.sql            # ← 已给你（本目录）
+│   ├── models.py             # SQLAlchemy 模型
+│   └── session.py
+├── recall/                   # ⭐ 召回层（7 路）
+│   ├── base.py               # 召回接口
+│   ├── interest.py           # ① 兴趣
+│   ├── forgotten.py          # ② 遗珠 ⭐
+│   ├── trending.py           # ③ 热榜（velocity）
+│   ├── fresh.py              # ④ 新鲜
+│   ├── following.py          # ⑤ 关注
+│   ├── explore.py            # ⑥ 探索
+│   └── similar.py            # ⑦ 相似
+├── rank/
+│   ├── pre_rank.py           # 粗排（轻量过滤）
+│   ├── rank.py               # 精排（打分公式）
+│   └── rerank.py             # 重排（打散/去重/疲劳）
+├── pool/
+│   ├── pool_state.py         # ⭐ 流量池状态机
+│   └── promote.py            # 定时晋级任务
+├── events/
+│   ├── collector.py          # 埋点接收
+│   └── profile.py            # 画像更新
+└── jobs/
+    ├── snapshot_stars.py     # 定时抓 star 快照（算 velocity）
+    └── rescore.py            # 定时重算质量分/遗忘分
+</code></pre></div>
+<p><strong>API 骨架</strong>：</p>
+<div class="code-wrap"><code>GET  /api/feed?cursor=&amp;limit=10         # 拉取 Feed（核心）
+POST /api/events                        # 批量上报埋点
+POST /api/repos/{id}/like               # 点赞
+POST /api/repos/{id}/star               # 收藏（同步 GitHub）
+GET  /api/repos/{id}/comments           # 评论
+POST /api/repos/{id}/comments
+GET  /api/repos/{id}                    # 详情
+GET  /api/user/profile                  # 我的兴趣画像（可展示给用户）
+</code></pre></div>
+<hr />
+<h2 id="_8">八、实施顺序建议（避开"半途而废"）</h2>
+<p><strong>阶段 1：能刷起来（1~2 天）</strong>
+1. 建表（跑 <code>schema.sql</code>）
+2. 灌 200 个仓库的假数据 / 真实数据
+3. 只实现 ①兴趣 + ③热榜 + ⑥探索 三路召回
+4. 打分公式用<strong>最简版</strong>（只有 eng + recency + affinity）
+5. 前端能滑起来</p>
+<p><strong>阶段 2：能赛马（2~3 天）</strong>
+6. 加 <code>repo_pools</code> 状态机 + 晋级定时任务
+7. 埋点全链路打通（曝光必埋，否则算不出率）
+8. 加 <code>repo_star_snapshots</code> 定时任务 → 算出 velocity</p>
+<p><strong>阶段 3：有特色（2~3 天）</strong>
+9. 加 ②遗珠召回 + <code>forgotten_score</code> 计算
+10. 加重排打散 / 疲劳度
+11. 加 7 天长效复活通路</p>
+<p><strong>阶段 4：变聪明（后续）</strong>
+12. 用户画像向量化（双塔召回）
+13. 把统计率换成模型预测</p>
+<hr />
+<h2 id="_9">九、避坑清单</h2>
+<table>
+<thead>
+<tr>
+<th>❌ 别做</th>
+<th>✅ 应该做</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>一上来上深度学习 / 双塔</td>
+<td>先用统计率跑通闭环</td>
+</tr>
+<tr>
+<td>用总 star 数排序</td>
+<td>用 <strong>star 增速</strong>（velocity）</td>
+</tr>
+<tr>
+<td>把完播率当核心指标</td>
+<td>抖音自己都降权了，<strong>用 star 转化率</strong></td>
+</tr>
+<tr>
+<td>忘了埋"曝光"事件</td>
+<td>没有曝光分母，所有率都算不出来</td>
+</tr>
+<tr>
+<td>老仓库只按 star 排</td>
+<td>专门开<strong>遗珠通路</strong></td>
+</tr>
+<tr>
+<td>只做单一召回</td>
+<td>至少 3 路，否则覆盖面太窄</td>
+</tr>
+<tr>
+<td>删掉表现差的仓库</td>
+<td>抖音明确"别频繁删"，留<strong>复活通路</strong></td>
+</tr>
+<tr>
+<td>直接抄 douyin-vue 代码</td>
+<td>那个仓库<strong>禁止商用</strong>，只学思路</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_10">十、参考出处</h2>
+<section class="footnotes"><h2>参考来源</h2><ol><li id="fn-1">[抖音流量池推流技巧 — opp2.com](<a href="https://www.opp2.com/384920.html" target="_blank" rel="noopener">https://www.opp2.com/384920.html</a>) —— 6 套并行推荐算法、流量池分层、赛马机制 <a class="fn-back" href="#fnref-1">↩</a></li><li id="fn-2">[抖音推荐页流量池机制深度解析与突破策略 — 今日头条](<a href="https://m.toutiao.com/article/7659929329715773952" target="_blank" rel="noopener">https://m.toutiao.com/article/7659929329715773952</a>) —— 2026 三大变革：7天长效、权重重定义、AI行为预测 <a class="fn-back" href="#fnref-2">↩</a></li><li id="fn-3">[2026抖音算法新规实战 — xinlook.com](<a href="https://xinlook.com/article/3611ddbef97f0e8a6ca4374c3774eecd.html" target="_blank" rel="noopener">https://xinlook.com/article/3611ddbef97f0e8a6ca4374c3774eecd.html</a>) —— 完播率从 35% 降至不足 10%、深度互动四项权重（评论30%/分享25%/收藏25%/关注20%） <a class="fn-back" href="#fnref-3">↩</a></li><li id="fn-4">[抖音算法底层拆解 — tofei.net](<a href="http://www.tofei.net/101/352" target="_blank" rel="noopener">http://www.tofei.net/101/352</a>) —— 召回/排序/重排三阶段、《2026推荐系统技术白皮书》、512维向量、疲劳度衰减因子 <a class="fn-back" href="#fnref-4">↩</a></li><li id="fn-5">[2026流量分发机制讲解 — 新浪看点](<a href="https://k.sina.cn/article_7879848900_1d5acf3c401902xd3q.html" target="_blank" rel="noopener">https://k.sina.cn/article_7879848900_1d5acf3c401902xd3q.html</a>) —— 推荐得分=预测行为概率×行为价值权重、五级流量池、全流程分发链路 <a class="fn-back" href="#fnref-5">↩</a></li><li id="fn-6">[抖音为什么懂你?从 DFS 到推荐系统 — 稀土掘金](<a href="https://juejin.cn/post/7651872910340505638" target="_blank" rel="noopener">https://juejin.cn/post/7651872910340505638</a>) —— 四层漏斗、双塔模型、Explore vs Exploit 打散 <a class="fn-back" href="#fnref-6">↩</a></li><li id="fn-7">[推荐系统三阶段架构技术内幕 — CSDN](<a href="https://blog.csdn.net/zlcentos/article/details/163667718" target="_blank" rel="noopener">https://blog.csdn.net/zlcentos/article/details/163667718</a>) —— 10亿→5000→500→20 各阶段候选数量级 <a class="fn-back" href="#fnref-7">↩</a></li></ol></section>
+    </main>
+  </div>
+</div>
+
+<script>
+// 滚动进度
+const bar = document.getElementById('bar');
+let raf = null;
+addEventListener('scroll', () => {
+  if (raf) return;
+  raf = requestAnimationFrame(() => {
+    const h = document.documentElement;
+    const p = h.scrollTop / (h.scrollHeight - h.clientHeight || 1);
+    bar.style.width = (p * 100).toFixed(2) + '%';
+    raf = null;
+  });
+}, { passive: true });
+
+// 表格自动包一层滚动容器（移动端可横向滑）
+document.querySelectorAll('.main table').forEach(t => {
+  if (t.parentElement.classList.contains('table-scroll')) return;
+  const w = document.createElement('div');
+  w.className = 'table-scroll';
+  t.parentNode.insertBefore(w, t);
+  w.appendChild(t);
+});
+
+// 滚动进入视口时渐显（IntersectionObserver，不阻塞首屏）
+if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  const els = document.querySelectorAll('.main > *');
+  els.forEach(el => { el.style.animation = 'none'; el.style.opacity = '0'; });
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((e, i) => {
+      if (e.isIntersecting) {
+        e.target.style.animation = `rise .6s cubic-bezier(.2,.7,.3,1) ${Math.min(i*0.05,0.3)}s forwards`;
+        io.unobserve(e.target);
+      }
+    });
+  }, { rootMargin: '0px 0px -8% 0px', threshold: 0.01 });
+  els.forEach(el => io.observe(el));
+}
+
+// 目录当前章节高亮
+const links = [...document.querySelectorAll('.toc-link')];
+const heads = [...document.querySelectorAll('.main h2[id]')];
+if (links.length && heads.length) {
+  const hio = new IntersectionObserver((es) => {
+    es.forEach(e => {
+      if (e.isIntersecting) {
+        links.forEach(l => l.style.background = '');
+        const id = e.target.id;
+        const a = links.find(l => l.getAttribute('href') === '#' + id);
+        if (a) { a.style.background = 'var(--glass-strong)'; a.style.color = 'var(--txt)'; }
+      }
+    });
+  }, { rootMargin: '-12% 0px -76% 0px' });
+  heads.forEach(h => hio.observe(h));
+}
+</script>
+</body>
+</html>

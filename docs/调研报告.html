@@ -1,0 +1,1269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<title>GitHub 仓库推流平台 · 调研报告</title>
+<style>
+:root {
+  --bg-0:#05060a;
+  --glass: rgba(255,255,255,.055);
+  --glass-strong: rgba(255,255,255,.085);
+  --stroke: rgba(255,255,255,.11);
+  --stroke-hi: rgba(255,255,255,.22);
+  --txt: #eef1f7;
+  --txt-dim: #9aa3b6;
+  --txt-faint: #6b7488;
+  --accent: #6ea8ff;
+  --accent-2:#b98bff;
+  --ok:#3ddc97;
+  --warn:#ffc857;
+  --bad:#ff6b81;
+  --radius: 20px;
+  --blur: 22px;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC",
+          "HarmonyOS Sans SC", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+body {
+  margin:0; padding:0;
+  font-family: var(--sans);
+  background: var(--bg-0);
+  color: var(--txt);
+  line-height: 1.78;
+  font-size: 15.5px;
+  letter-spacing: .006em;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ============ 环境渐变光晕（Dark Glassmorphism 基底） ============ */
+.orbs { position: fixed; inset:0; z-index:0; pointer-events:none; overflow:hidden; }
+.orb { position:absolute; border-radius:50%; filter: blur(90px); opacity:.5;
+        animation: drift 26s ease-in-out infinite alternate; }
+.orb.a { width:52vw; height:52vw; background:radial-gradient(circle,#2d5bff,transparent 68%);
+          top:-14vw; left:-10vw; }
+.orb.b { width:46vw; height:46vw; background:radial-gradient(circle,#8b3dff,transparent 68%);
+          top:24vh; right:-14vw; animation-duration:32s; animation-delay:-6s; }
+.orb.c { width:40vw; height:40vw; background:radial-gradient(circle,#00c2a8,transparent 70%);
+          bottom:-12vw; left:26vw; animation-duration:38s; animation-delay:-14s; opacity:.34; }
+@keyframes drift {
+  from { transform: translate3d(0,0,0) scale(1); }
+  to   { transform: translate3d(4vw,5vh,0) scale(1.16); }
+}
+.grain { position:fixed; inset:0; z-index:1; pointer-events:none; opacity:.035;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E"); }
+
+/* ============ 布局 ============ */
+.shell { position:relative; z-index:2; max-width:1240px; margin:0 auto; padding: 0 22px 100px; }
+.layout { display:grid; grid-template-columns: 250px minmax(0,1fr); gap: 34px; align-items:start; }
+
+/* ============ 顶部 Hero ============ */
+.hero { padding: 74px 0 34px; }
+.badge {
+  display:inline-flex; align-items:center; gap:8px;
+  padding: 6px 14px; border-radius: 100px;
+  background: var(--glass); border:1px solid var(--stroke);
+  backdrop-filter: blur(var(--blur)); -webkit-backdrop-filter: blur(var(--blur));
+  font-size: 12.5px; color: var(--txt-dim); letter-spacing:.05em;
+  text-transform: uppercase; font-weight: 600;
+}
+.badge .dot { width:6px;height:6px;border-radius:50%;background:var(--ok);
+  box-shadow:0 0 10px var(--ok); animation: pulse 2.4s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+h1.title {
+  margin: 20px 0 0; font-size: clamp(30px, 4.6vw, 52px); font-weight: 700;
+  letter-spacing: -.028em; line-height: 1.14;
+  background: linear-gradient(96deg,#ffffff 6%, #9cc4ff 42%, #c9a6ff 74%, #7ee7d1 100%);
+  -webkit-background-clip:text; background-clip:text;
+  -webkit-text-fill-color: transparent;
+}
+.hero p.sub { margin: 18px 0 0; max-width: 660px; color: var(--txt-dim); font-size: 16px; }
+.hero .meta { margin-top: 26px; display:flex; flex-wrap:wrap; gap: 10px; }
+.chip { padding:5px 12px; border-radius:100px; font-size:12.5px; font-family: var(--mono);
+  background: var(--glass); border:1px solid var(--stroke); color: var(--txt-dim); }
+
+/* ============ 侧边目录 ============ */
+.side { position: sticky; top: 22px; }
+.side-inner {
+  padding: 18px 16px; border-radius: var(--radius);
+  background: var(--glass); border:1px solid var(--stroke);
+  backdrop-filter: blur(var(--blur)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(160%);
+}
+.side h4 { margin:0 0 12px; font-size:11.5px; letter-spacing:.13em; text-transform:uppercase;
+  color: var(--txt-faint); font-weight:700; }
+.toc-link { display:block; padding: 7px 10px; margin: 1px 0; border-radius: 10px;
+  color: var(--txt-dim); text-decoration:none; font-size: 13.2px; line-height:1.45;
+  transition: background .18s ease, color .18s ease, transform .18s ease; }
+.toc-link:hover { background: var(--glass-strong); color: var(--txt); transform: translateX(3px); }
+
+/* ============ 主内容玻璃卡 ============ */
+.main {
+  padding: 40px 42px 52px; border-radius: 26px;
+  background: linear-gradient(160deg, rgba(255,255,255,.072), rgba(255,255,255,.032));
+  border:1px solid var(--stroke);
+  backdrop-filter: blur(26px) saturate(165%);
+  -webkit-backdrop-filter: blur(26px) saturate(165%);
+  box-shadow: 0 28px 80px -28px rgba(0,0,0,.85), inset 0 1px 0 rgba(255,255,255,.09);
+}
+
+/* ============ 排版 ============ */
+.main h2 {
+  margin: 62px 0 20px; padding-top: 26px; font-size: 25px; font-weight: 700;
+  letter-spacing: -.018em; line-height:1.3;
+  border-top: 1px solid var(--stroke);
+  scroll-margin-top: 24px;
+}
+.main h2:first-of-type { margin-top: 12px; border-top: none; padding-top:0; }
+.main h3 { margin: 40px 0 14px; font-size: 18.5px; font-weight: 660; scroll-margin-top:24px; }
+.main h3::before { content:''; display:inline-block; width:4px; height:15px; border-radius:3px;
+  background: linear-gradient(180deg,var(--accent),var(--accent-2)); margin-right:10px;
+  transform: translateY(-1px); }
+.main h4 { margin: 26px 0 10px; font-size: 15.5px; color: var(--accent); font-weight:640; }
+.main p { margin: 13px 0; color: #d8dde9; }
+.main a { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(110,168,255,.32);
+  transition: border-color .2s, color .2s; }
+.main a:hover { border-bottom-color: var(--accent); color:#a9caff; }
+strong { color:#fff; font-weight: 660; }
+
+/* ============ 引用块 ============ */
+blockquote {
+  margin: 20px 0; padding: 16px 20px 16px 22px;
+  border-left: 3px solid transparent;
+  border-image: linear-gradient(180deg,var(--accent),var(--accent-2)) 1;
+  border-radius: 0 14px 14px 0;
+  background: rgba(110,168,255,.062);
+  color: #cbd4e6; font-size: 14.6px;
+}
+blockquote p { margin: 7px 0; color:#cbd4e6; }
+blockquote p:first-child { margin-top:0; } blockquote p:last-child { margin-bottom:0; }
+
+/* ============ 表格 ============ */
+.table-scroll { overflow-x:auto; margin: 20px 0; border-radius: 15px;
+  border:1px solid var(--stroke); background: rgba(255,255,255,.022);
+  -webkit-overflow-scrolling: touch; }
+.table-scroll::-webkit-scrollbar { height: 8px; }
+.table-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,.16); border-radius:4px; }
+table { border-collapse: collapse; width: 100%; min-width: 520px; font-size: 14px; }
+thead th {
+  background: rgba(255,255,255,.058); color:#fff; font-weight:640;
+  padding: 12px 15px; text-align: left; white-space: nowrap;
+  border-bottom: 1px solid var(--stroke-hi); font-size: 13.4px;
+}
+tbody td { padding: 11px 15px; border-bottom: 1px solid rgba(255,255,255,.055);
+  color: #ccd4e3; vertical-align: top; }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr { transition: background .16s ease; }
+tbody tr:hover { background: rgba(255,255,255,.036); }
+td code, th code { font-size: 12.6px; }
+
+/* ============ 代码 ============ */
+code { font-family: var(--mono); font-size: 13px;
+  background: rgba(255,255,255,.075); padding: 2px 6px; border-radius: 6px;
+  color: #b9d4ff; border:1px solid rgba(255,255,255,.055); }
+.code-wrap { position: relative; margin: 20px 0; border-radius: 15px; overflow: hidden;
+  border:1px solid var(--stroke); background: rgba(0,0,0,.42); }
+.code-wrap pre { margin:0; padding: 18px 20px; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+.code-wrap pre code { background:none; border:none; padding:0; color:#cfd9ea;
+  font-size: 13px; line-height: 1.72; display:block; white-space: pre; }
+.code-lang { position:absolute; top:0; right:0; padding: 4px 12px; font-size:10.5px;
+  letter-spacing:.09em; text-transform:uppercase; font-family: var(--mono);
+  color: var(--txt-faint); background: rgba(255,255,255,.06);
+  border-radius: 0 0 0 10px; border-left:1px solid var(--stroke);
+  border-bottom:1px solid var(--stroke); }
+.code-wrap::-webkit-scrollbar { height:8px; }
+.code-wrap::-webkit-scrollbar-thumb { background: rgba(255,255,255,.15); border-radius:4px; }
+
+/* ============ 列表 ============ */
+.main ul, .main ol { margin: 14px 0; padding-left: 26px; }
+.main li { margin: 7px 0; color:#d3dae7; }
+.main li::marker { color: var(--accent); }
+.main ul li input[type=checkbox] { margin-right:7px; accent-color: var(--ok); }
+
+/* ============ 分割线 ============ */
+hr { border: none; height: 1px; margin: 42px 0;
+  background: linear-gradient(90deg, transparent, var(--stroke-hi), transparent); }
+
+/* ============ 脚注 ============ */
+.fn-ref a { text-decoration:none; font-size: 11px; padding: 1px 4px; border-radius:5px;
+  background: rgba(110,168,255,.18); border:none; color:#a9caff; font-family:var(--mono); }
+.fn-ref a:hover { background: rgba(110,168,255,.34); }
+.footnotes { margin-top: 56px; padding-top: 26px; border-top:1px solid var(--stroke); }
+.footnotes h2 { border:none; padding:0; margin:0 0 16px; font-size: 19px; }
+.footnotes ol { padding-left: 22px; }
+.footnotes li { font-size: 13.4px; color: var(--txt-dim); margin: 10px 0; line-height:1.7; }
+.footnotes a { word-break: break-all; }
+.fn-back { text-decoration:none; border:none !important; opacity:.5; margin-left:5px; }
+
+/* ============ 入场动画（仅 GPU 四属性） ============ */
+.reveal { opacity:0; transform: translate3d(0,22px,0);
+  animation: rise .68s cubic-bezier(.2,.7,.3,1) forwards; }
+@keyframes rise { to { opacity:1; transform: translate3d(0,0,0); } }
+.main > * { opacity:0; transform: translate3d(0,14px,0);
+  animation: rise .55s cubic-bezier(.2,.7,.3,1) forwards; }
+.main > *:nth-child(1) { animation-delay: 0.028s; }.main > *:nth-child(2) { animation-delay: 0.056s; }.main > *:nth-child(3) { animation-delay: 0.084s; }.main > *:nth-child(4) { animation-delay: 0.112s; }.main > *:nth-child(5) { animation-delay: 0.140s; }.main > *:nth-child(6) { animation-delay: 0.168s; }.main > *:nth-child(7) { animation-delay: 0.196s; }.main > *:nth-child(8) { animation-delay: 0.224s; }.main > *:nth-child(9) { animation-delay: 0.252s; }.main > *:nth-child(10) { animation-delay: 0.280s; }.main > *:nth-child(11) { animation-delay: 0.308s; }.main > *:nth-child(12) { animation-delay: 0.336s; }.main > *:nth-child(13) { animation-delay: 0.364s; }.main > *:nth-child(14) { animation-delay: 0.392s; }.main > *:nth-child(15) { animation-delay: 0.420s; }.main > *:nth-child(16) { animation-delay: 0.448s; }.main > *:nth-child(17) { animation-delay: 0.476s; }.main > *:nth-child(18) { animation-delay: 0.504s; }.main > *:nth-child(19) { animation-delay: 0.532s; }.main > *:nth-child(20) { animation-delay: 0.560s; }.main > *:nth-child(21) { animation-delay: 0.588s; }.main > *:nth-child(22) { animation-delay: 0.600s; }.main > *:nth-child(23) { animation-delay: 0.600s; }.main > *:nth-child(24) { animation-delay: 0.600s; }.main > *:nth-child(25) { animation-delay: 0.600s; }.main > *:nth-child(26) { animation-delay: 0.600s; }.main > *:nth-child(27) { animation-delay: 0.600s; }.main > *:nth-child(28) { animation-delay: 0.600s; }.main > *:nth-child(29) { animation-delay: 0.600s; }.main > *:nth-child(30) { animation-delay: 0.600s; }.main > *:nth-child(31) { animation-delay: 0.600s; }.main > *:nth-child(32) { animation-delay: 0.600s; }.main > *:nth-child(33) { animation-delay: 0.600s; }.main > *:nth-child(34) { animation-delay: 0.600s; }.main > *:nth-child(35) { animation-delay: 0.600s; }.main > *:nth-child(36) { animation-delay: 0.600s; }.main > *:nth-child(37) { animation-delay: 0.600s; }.main > *:nth-child(38) { animation-delay: 0.600s; }.main > *:nth-child(39) { animation-delay: 0.600s; }.main > *:nth-child(40) { animation-delay: 0.600s; }.main > *:nth-child(41) { animation-delay: 0.600s; }.main > *:nth-child(42) { animation-delay: 0.600s; }.main > *:nth-child(43) { animation-delay: 0.600s; }.main > *:nth-child(44) { animation-delay: 0.600s; }.main > *:nth-child(45) { animation-delay: 0.600s; }.main > *:nth-child(46) { animation-delay: 0.600s; }.main > *:nth-child(47) { animation-delay: 0.600s; }.main > *:nth-child(48) { animation-delay: 0.600s; }.main > *:nth-child(49) { animation-delay: 0.600s; }.main > *:nth-child(50) { animation-delay: 0.600s; }.main > *:nth-child(51) { animation-delay: 0.600s; }.main > *:nth-child(52) { animation-delay: 0.600s; }.main > *:nth-child(53) { animation-delay: 0.600s; }.main > *:nth-child(54) { animation-delay: 0.600s; }.main > *:nth-child(55) { animation-delay: 0.600s; }.main > *:nth-child(56) { animation-delay: 0.600s; }.main > *:nth-child(57) { animation-delay: 0.600s; }.main > *:nth-child(58) { animation-delay: 0.600s; }.main > *:nth-child(59) { animation-delay: 0.600s; }.main > *:nth-child(60) { animation-delay: 0.600s; }.main > *:nth-child(61) { animation-delay: 0.600s; }.main > *:nth-child(62) { animation-delay: 0.600s; }.main > *:nth-child(63) { animation-delay: 0.600s; }.main > *:nth-child(64) { animation-delay: 0.600s; }.main > *:nth-child(65) { animation-delay: 0.600s; }.main > *:nth-child(66) { animation-delay: 0.600s; }.main > *:nth-child(67) { animation-delay: 0.600s; }.main > *:nth-child(68) { animation-delay: 0.600s; }.main > *:nth-child(69) { animation-delay: 0.600s; }.main > *:nth-child(70) { animation-delay: 0.600s; }.main > *:nth-child(71) { animation-delay: 0.600s; }.main > *:nth-child(72) { animation-delay: 0.600s; }.main > *:nth-child(73) { animation-delay: 0.600s; }.main > *:nth-child(74) { animation-delay: 0.600s; }.main > *:nth-child(75) { animation-delay: 0.600s; }.main > *:nth-child(76) { animation-delay: 0.600s; }.main > *:nth-child(77) { animation-delay: 0.600s; }.main > *:nth-child(78) { animation-delay: 0.600s; }.main > *:nth-child(79) { animation-delay: 0.600s; }.main > *:nth-child(80) { animation-delay: 0.600s; }.main > *:nth-child(81) { animation-delay: 0.600s; }.main > *:nth-child(82) { animation-delay: 0.600s; }.main > *:nth-child(83) { animation-delay: 0.600s; }.main > *:nth-child(84) { animation-delay: 0.600s; }.main > *:nth-child(85) { animation-delay: 0.600s; }.main > *:nth-child(86) { animation-delay: 0.600s; }.main > *:nth-child(87) { animation-delay: 0.600s; }.main > *:nth-child(88) { animation-delay: 0.600s; }.main > *:nth-child(89) { animation-delay: 0.600s; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+  .main > * { opacity:1; transform:none; }
+}
+
+/* ============ 响应式 ============ */
+@media (max-width: 1080px) {
+  .layout { grid-template-columns: 1fr; }
+  .side { display:none; }
+}
+@media (max-width: 680px) {
+  body { font-size: 15px; }
+  .shell { padding: 0 14px 70px; }
+  .hero { padding: 46px 0 22px; }
+  .main { padding: 26px 18px 34px; border-radius: 20px; }
+  .main h2 { font-size: 21px; margin-top: 46px; }
+  .main h3 { font-size: 17px; }
+  .code-wrap pre { padding: 14px; }
+  .code-wrap pre code { font-size: 12px; }
+  h1.title { font-size: 29px; }
+}
+
+/* 顶部渐隐遮罩，增强层次 */
+.top-fade { position:fixed; inset:0 0 auto 0; height:120px; z-index:3; pointer-events:none;
+  background: linear-gradient(180deg, rgba(5,6,10,.9), transparent); }
+
+/* 滚动进度条 */
+.progress { position: fixed; top:0; left:0; height:2px; z-index: 9; width:0;
+  background: linear-gradient(90deg,var(--accent),var(--accent-2),#7ee7d1);
+  box-shadow: 0 0 14px rgba(110,168,255,.75); transition: width .1s linear; }
+</style>
+</head>
+<body>
+<div class="orbs"><div class="orb a"></div><div class="orb b"></div><div class="orb c"></div></div>
+<div class="grain"></div>
+<div class="top-fade"></div>
+<div class="progress" id="bar"></div>
+
+<div class="shell">
+  <header class="hero">
+    <div class="badge"><span class="dot"></span>调研阶段 · v0.1</div>
+    <h1 class="title">GitHub 仓库推流平台<br>前期调研报告</h1>
+    <p class="sub">
+      做一套仿抖音的信息流推流系统，但推的不是短视频，而是 <strong>GitHub 仓库</strong> ——
+      让那些无人访问、被遗忘的优质开源项目重新获得曝光。
+    </p>
+    <div class="meta">
+      <span class="chip">2026-09-11</span>
+      <span class="chip">10 个章节</span>
+      <span class="chip">17 个候选仓库</span>
+      <span class="chip">License 已逐个核实</span>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="side">
+      <nav class="side-inner">
+        <h4>目录</h4>
+        <a class="toc-link" href="#0-先说结论-TL-DR">0. 先说结论（TL;DR）</a><a class="toc-link" href="#一-核心认知纠正-Monolith-抖音算法">一、核心认知纠正：Monolith ≠ 抖音算法</a><a class="toc-link" href="#二-抖音推流机制-公开可查的真相">二、抖音推流机制：公开可查的真相</a><a class="toc-link" href="#三-核心参考实现-SOCIAL-ALGORITHM">三、核心参考实现：SOCIAL-ALGORITHM</a><a class="toc-link" href="#四-GitHub-特有的推荐信号-这决定了项目成败">四、GitHub 特有的推荐信号（这决定了项目成败）</a><a class="toc-link" href="#五-UI-层面-抖音风格-GitHub-Apple-风格的融合">五、UI 层面：抖音风格 + GitHub/Apple 风格的融合</a><a class="toc-link" href="#六-其他平台推流机制调研-抖音-B站-快手-小红书-微信">六、其他平台推流机制调研（抖音/B站/快手/小红书/微信）</a><a class="toc-link" href="#七-架构设计建议">七、架构设计建议</a><a class="toc-link" href="#八-License-与合规风险清单">八、License 与合规风险清单 ⚠️</a><a class="toc-link" href="#九-竞品-同类调研-我们和它们的区别">九、竞品/同类调研（我们和它们的区别）</a><a class="toc-link" href="#十-下一步-A-B-C-三条路">十、下一步：A / B / C 三条路</a><a class="toc-link" href="#附录-A-一键可下载的仓库清单-你手动-clone-用">附录 A：一键可下载的仓库清单（你手动 clone 用）</a><a class="toc-link" href="#附录-B-参考来源">附录 B：参考来源</a>
+      </nav>
+    </aside>
+    <main class="main">
+<h1 id="github">「GitHub 仓库推流平台」前期调研报告</h1>
+<blockquote>
+<p><strong>调研目标</strong>：做一套「仿抖音的信息流推流平台」，但推的不是短视频，而是 <strong>GitHub 仓库</strong>。
+让那些无人访问、被遗忘的优质开源仓库重新获得曝光。</p>
+<p>版本：v0.1（调研阶段）
+日期：2026-09-11</p>
+</blockquote>
+<hr />
+<h2 id="0-tldr">0. 先说结论（TL;DR）</h2>
+<table>
+<thead>
+<tr>
+<th>问题</th>
+<th>结论</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>抖音推流算法能直接抄吗？</td>
+<td>❌ 不能。抖音没开源推荐算法，开源的是<strong>引擎</strong>（Monolith），不是<strong>策略权重</strong></td>
+</tr>
+<tr>
+<td>那怎么做出"像抖音"的效果？</td>
+<td>✅ 用「多路召回 + 加权打分 + 探索/利用」这套<strong>业界公开范式</strong>自研，参考 <code>SOCIAL-ALGORITHM</code> 的可读实现</td>
+</tr>
+<tr>
+<td>有没有可以直接用的抖音 UI？</td>
+<td>✅ <code>zyronon/douyin</code>（Vue3，10.9k★）可直接跑，但<strong>明确禁止商用</strong>，只适合学习交互</td>
+</tr>
+<tr>
+<td>高逼格毛玻璃 UI 靠什么实现？</td>
+<td>✅ GSAP（已 100% 免费含商用）+ Motion + Lenis，Apple Liquid Glass 风格是 2026 主流</td>
+</tr>
+<tr>
+<td>最推荐的技术路线</td>
+<td>React 19 + Vite + Tailwind v4 + GSAP/Motion + Flask/FastAPI + SQLite，<strong>90% 自研</strong>，开源只借「思想」和「UI 范式」</td>
+</tr>
+<tr>
+<td>最大法律风险</td>
+<td>⚠️ 用抖音商标/素材/UI 复刻 + 非商用协议仓库的代码</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="monolith">一、核心认知纠正：Monolith ≠ 抖音算法</h2>
+<p>这是整个调研里<strong>最重要的一条</strong>，先把它钉死，不然后面架构会走偏。</p>
+<p>社区里流传「抖音推荐算法开源了，就在 GitHub 上」。这句话<strong>半真半假</strong><sup class="fn-ref"><a href="#fn-1" id="fnref-1">1</a></sup>：</p>
+<div class="code-wrap"><code>字节跳动的 monolith 仓库里有什么：
+  ✅ 碰撞无关嵌入表（collisionless embedding table）
+  ✅ 实时训练架构（分钟级更新模型）
+  ✅ 分布式训练 + 在线服务框架
+  ❌ 抖音实际用了哪些特征信号
+  ❌ 每个信号的权重是多少
+  ❌ 排序公式长什么样
+</code></pre></div>
+<p>打个比方：<strong>字节公开了发动机的图纸，但没公开方向盘怎么打</strong><sup class="fn-ref"><a href="#fn-1" id="fnref-1">1</a></sup>。Monolith 是「引擎」，不是「策略」。</p>
+<blockquote>
+<p>Monolith 的 README 标题现在已改成 <em>"A Lightweight Recommendation System"</em>，最后提交在 2023-11，社区反馈它在 2025-10 已被归档为只读<sup class="fn-ref"><a href="#fn-1" id="fnref-1">1</a></sup>。<strong>它能看，但不能作为项目依赖。</strong></p>
+</blockquote>
+<p><strong>对我们的意义</strong>：Monolith 可以读它的设计理念（实时性 + 无碰撞嵌入），但<strong>不要试图编译它</strong>（Bazel + TensorFlow 老版本，Linux only，社区反馈大量 segfault<sup class="fn-ref"><a href="#fn-2" id="fnref-2">2</a></sup>）。</p>
+<p>对比一下三家的公开程度<sup class="fn-ref"><a href="#fn-1" id="fnref-1">1</a></sup>：</p>
+<table>
+<thead>
+<tr>
+<th>平台</th>
+<th>公开方式</th>
+<th>你能读到什么</th>
+<th>读不到什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>X (Twitter)</td>
+<td>真实代码开源</td>
+<td>具体评估哪些特征</td>
+<td>只有权重值保密</td>
+</tr>
+<tr>
+<td>TikTok / 抖音</td>
+<td>只开源引擎</td>
+<td>为什么快</td>
+<td>它评估什么</td>
+</tr>
+<tr>
+<td>Instagram</td>
+<td>代码闭源，官方文档说明</td>
+<td>各界面信号及其重要性排序</td>
+<td>实现</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_1">二、抖音推流机制：公开可查的真相</h2>
+<p>抖音官方在 2020-06-18 的 newsroom 里公开说明过推荐系统的工作方式<sup class="fn-ref"><a href="#fn-1" id="fnref-1">1</a></sup>：</p>
+<blockquote>
+<p>官方明确表态：<strong>粉丝数不是直接影响因素</strong>。信号分三大类：
+① 你的行为（完播、点赞、评论、分享、关注）
+② 视频信息（音频、文案、话题标签）
+③ 设备与账号设置（语言、地区、设备类型）</p>
+</blockquote>
+<p>而技术圈公认的抖音式信息流的核心逻辑是 <strong>「多级漏斗 + 实时反馈」</strong>：</p>
+<div class="code-wrap"><code>                    ┌──────────────────────────────────┐
+   百万级仓库池  →   │ ① 召回 Recall                     │  千级候选
+                    │   多路并行：协同过滤/标签/热榜/关注  │
+                    └──────────────────────────────────┘
+                                    ↓
+                    ┌──────────────────────────────────┐
+   千级候选      →   │ ② 粗排 Pre-Rank                   │  百级
+                    │   轻量模型快速过滤                  │
+                    └──────────────────────────────────┘
+                                    ↓
+                    ┌──────────────────────────────────┐
+   百级          →   │ ③ 精排 Rank                       │  十几条
+                    │   重模型 + 多目标融合（完播/点赞…）   │
+                    └──────────────────────────────────┘
+                                    ↓
+                    ┌──────────────────────────────────┐
+   十几条        →   │ ④ 重排 Re-Rank                    │  最终 Feed
+                    │   打散/多样性/探索位/去重           │
+                    └──────────────────────────────────┘
+                                    ↓
+                    ┌──────────────────────────────────┐
+                       用户交互 → 实时回写 → 影响下一次    
+                    └──────────────────────────────────┘
+</code></pre></div>
+<p><strong>这个漏斗就是我们项目要仿的东西。</strong> 好消息是：这套范式在开源界有<strong>完全可读的实现</strong>。</p>
+<hr />
+<h2 id="social-algorithm">三、核心参考实现：<code>SOCIAL-ALGORITHM</code></h2>
+<p>调研中发现的<strong>最贴合我们需求</strong>的仓库。</p>
+<table>
+<thead>
+<tr>
+<th>项目信息</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>仓库</td>
+<td><a href="https://github.com/blacckoscar/SOCIAL-ALGORITHM"><code>blacckoscar/SOCIAL-ALGORITHM</code></a></td>
+</tr>
+<tr>
+<td>项目名</td>
+<td>FeedAlgo — Addictive Feed Algorithm (TikTok / Instagram style)</td>
+</tr>
+<tr>
+<td>语言</td>
+<td>Go（全栈，含 JWT 鉴权 + SQLite）</td>
+</tr>
+<tr>
+<td>License</td>
+<td>⚠️ <strong>仓库没有 LICENSE 文件</strong> → 默认保留所有权利，<strong>只能读思路，不能抄代码</strong></td>
+</tr>
+<tr>
+<td>状态</td>
+<td>单次 initial commit（2026-02），玩具项目</td>
+</tr>
+<tr>
+<td>可读性</td>
+<td>⭐⭐⭐⭐⭐ 算法写得极清楚，README 直接给出了完整公式</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_2">它的打分算法（关键！直接可借鉴）</h3>
+<div class="code-wrap"><span class="code-lang">python</span><div class="code-wrap"><code class="language-python"></div># ① 互动率（engagement rate）—— 越高越&quot;上瘾&quot;
+eng = (w_like*likes + w_comment*comments + w_share*shares + w_completion*completion) / (views + 1)
+# completion = 总观看时长 / (视频时长 × 播放次数)，上限封顶
+# → 高完播率的内容排名更高，这就是&quot;抖音味&quot;的来源
+
+# ② 时效性（recency）—— 指数衰减
+recency = exp(-lambda * hours_old)     # lambda=0.08，越新分越高
+
+# ③ 亲近度（affinity）—— 跟你互动过的作者加权
+if 用户之前赞过/看过这个作者:
+    score *= 1 + affinity_weight * log(1 + affinity_sum)   # affinity_weight=2.0
+
+# ④ 探索位（exploration）—— 打散信息茧房
+15% 的 feed 槽位替换成随机发现内容
+
+# ⑤ 去重（deduplication）
+登录用户已看过的 post_id 从候选池排除
+</code></pre></div>
+<h3 id="github_1">迁移到「推荐 GitHub 仓库」的映射表 ⭐</h3>
+<p>这是本报告的核心产出之一：</p>
+<table>
+<thead>
+<tr>
+<th>抖音概念</th>
+<th>本项目对应物</th>
+<th>数据来源</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>视频 (video)</td>
+<td><strong>GitHub 仓库</strong></td>
+<td>GitHub API / TrendPulse 爬虫</td>
+</tr>
+<tr>
+<td>完播率 (completion)</td>
+<td><strong>README 阅读完成度</strong> / 停留时长 / 点击 Releases、Issues 的深度行为</td>
+<td>前端埋点</td>
+</tr>
+<tr>
+<td>点赞 (like)</td>
+<td><strong>网页端点赞</strong>（用户描述的"网页端记录"）</td>
+<td>自建 SQL</td>
+</tr>
+<tr>
+<td>收藏 (collect)</td>
+<td><strong>GitHub Star</strong>（用户描述："收藏对应 GitHub 星星"）</td>
+<td>GitHub API</td>
+</tr>
+<tr>
+<td>评论 (comment)</td>
+<td><strong>GitHub Discussion / Issue</strong>（用户描述）</td>
+<td>GitHub API</td>
+</tr>
+<tr>
+<td>分享 (share)</td>
+<td>站外分享链接、复制仓库地址</td>
+<td>前端埋点</td>
+</tr>
+<tr>
+<td>作者 affinity</td>
+<td><strong>仓库 owner / 组织</strong> 维度加权</td>
+<td>自建 SQL</td>
+</tr>
+<tr>
+<td>热度时效</td>
+<td><strong>Star 增长速度</strong>（不是总 star 数！）</td>
+<td>两次快照差值</td>
+</tr>
+<tr>
+<td>冷启动</td>
+<td>新仓库没有 star → 用 <strong>Star Velocity（单位时间增速）</strong></td>
+<td>见下节</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>⚠️ <strong>关键设计难点</strong>：抖音用「完播率」当核心信号，但<strong>仓库没有"完播"概念</strong>。我们必须重新定义等价信号 —— 这是这个项目真正的原创价值点。候选方案见第七章。</p>
+</blockquote>
+<hr />
+<h2 id="github_2">四、GitHub 特有的推荐信号（这决定了项目成败）</h2>
+<p>GitHub 场景和短视频<strong>本质不同</strong>：
+- 短视频是<strong>即时消费</strong>，仓库是<strong>工具/知识</strong>，用户需要"找到有用的东西"
+- 短视频没有"过时"问题，仓库有（依赖过期、停止维护）
+- 优质仓库可能 <strong>半年 0 star</strong>，但代码质量极高 —— 这正是我们要解决的痛点</p>
+<h3 id="41">4.1 可用的信号与评分模型</h3>
+<p>调研到两个直接相关的开源实现：</p>
+<p><strong>① <code>jasperan/discover-github</code></strong> —— 多信号突围评分引擎<sup class="fn-ref"><a href="#fn-3" id="fnref-3">3</a></sup></p>
+<table>
+<thead>
+<tr>
+<th>信号</th>
+<th>权重</th>
+<th>衡量什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Star Velocity</strong></td>
+<td><strong>30%</strong></td>
+<td>每日新增 star（对数尺度）</td>
+</tr>
+<tr>
+<td>Freshness</td>
+<td>15%</td>
+<td>最后 push 距今时间</td>
+</tr>
+<tr>
+<td>Community Health</td>
+<td>15%</td>
+<td>贡献者数、issue、CI 流水线</td>
+</tr>
+<tr>
+<td>Adoption Signal</td>
+<td>15%</td>
+<td>fork/star 比、watcher、homepage</td>
+</tr>
+<tr>
+<td>Activity Momentum</td>
+<td>15%</td>
+<td>近期 commit + 年龄校正的 star 加成</td>
+</tr>
+<tr>
+<td>Documentation Quality</td>
+<td>10%</td>
+<td>README 长度、License、topics、描述</td>
+</tr>
+</tbody>
+</table>
+<p>分档：<code>S(80+) → A(65+) → B(50+) → C(35+) → D(&lt;35)</code>
+License：<strong>UPL 1.0 + Apache 2.0 双协议</strong> ✅ 可安全参考</p>
+<blockquote>
+<p>💡 <strong>注意它第一个信号就是 "Star Velocity" 而不是总 star 数</strong> —— 这正是解决「老仓库没人看」的关键思路。</p>
+</blockquote>
+<p><strong>② 通用热度公式（社区实践）</strong><sup class="fn-ref"><a href="#fn-4" id="fnref-4">4</a></sup></p>
+<div class="code-wrap"><code>热度分数 = (今日 star - 昨日 star) / 时间衰减因子
+
+# 没有历史快照时的降级方案：
+初始热度 = log(当前 star 数) / (创建至今小时数 + 1)
+</code></pre></div>
+<blockquote>
+<p>这个公式的意义：<strong>一个 24 小时内获得 100 star 的新项目，比一个存在一年总共 200 star 的项目在"今日"更热。</strong> 取对数是为了防止超级项目永远霸榜。</p>
+</blockquote>
+<h3 id="42">4.2 「唤醒沉睡仓库」的原创算法思路</h3>
+<p>这是本项目<strong>区别于所有现有 GitHub Trending 工具</strong>的核心创新点：</p>
+<div class="code-wrap"><code>传统 Trending：按 star 总数排序 → 老牌大项目霸榜 → 冷门优质仓库永远没机会
+
+我们的方案：给「被遗忘但优质」的仓库专门开一条召回通路
+
+遗忘分（Forgotten Score）=
+    (代码质量分)      # 有 CI / 有测试 / README 完整 / 最近有 commit
+  × (年龄衰减)        # 越久没被人看到，越该被推荐
+  × (低曝光惩罚)      # star 少的仓库加分 ← 与商业平台完全相反！
+  × (活跃维护标记)    # 最近 push 过 = 不是真死库
+</code></pre></div>
+<blockquote>
+<p>这等于做了一个<strong>「反马太效应」的推荐器</strong>：商业平台追求让热门更热，我们要做的是让<strong>遗珠浮上来</strong>。这个理念本身就是项目最好的宣传故事（正好呼应你的"让开源社区变得有活力"）。</p>
+</blockquote>
+<h3 id="43-license">4.3 License 合规检测（必须做）</h3>
+<p>推荐一个仓库给用户，<strong>License 是安全指标的一部分</strong>，不能推荐一个 GPL 的库给要做商业产品的人：</p>
+<div class="code-wrap"><code>License 风险分级（用于推荐时的&quot;安全提示&quot;标签）：
+  安全 🟢  MIT / Apache-2.0 / BSD / ISC / UPL
+  注意 🟡  MPL-2.0 / LGPL / EPL
+  风险 🔴  GPL-2.0 / GPL-3.0 / AGPL-3.0 （传染性强）
+  未知 ⚫  无 LICENSE 文件（默认保留所有权利）
+</code></pre></div>
+<p><code>discover-github</code> 的 <code>Documentation Quality</code> 信号里把 license 作为一个子项，我们的方案应该把它<strong>提升为核心安全标签</strong>。</p>
+<hr />
+<h2 id="ui-githubapple">五、UI 层面：抖音风格 + GitHub/Apple 风格的融合</h2>
+<h3 id="51">5.1 抖音交互骨架（可直接借鉴）</h3>
+<table>
+<thead>
+<tr>
+<th>项目</th>
+<th>技术栈</th>
+<th>★</th>
+<th>License</th>
+<th>能否商用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="https://github.com/zyronon/douyin"><code>zyronon/douyin</code></a></td>
+<td>Vue3 + Vite5 + Pinia</td>
+<td>10.9k</td>
+<td>未标 SPDX，README 明确写 <strong>"仅适用于学习和研究，不得用于商业使用"</strong></td>
+<td>❌ <strong>禁止商用</strong>（只学交互）</td>
+</tr>
+<tr>
+<td><a href="https://github.com/HipsterZipster/react-tiktok-style-video-scroller"><code>HipsterZipster/react-tiktok-style-video-scroller</code></a></td>
+<td>React + TS</td>
+<td>新项目</td>
+<td>MIT（仓库含 LICENSE）</td>
+<td>✅ 可商用</td>
+</tr>
+</tbody>
+</table>
+<p><strong>从 <code>zyronon/douyin</code> 可以学到（写成规范自己实现，不抄代码）</strong>：
+- 无限滑动视频流：<code>transition</code> 组件 + 动态加载 + 手势识别
+- 中央视频自动播放、离开视口自动暂停
+- 双击点赞手势
+- 条件路由缓存（keep-alive）
+- <code>rem</code> + 动态 <code>vh</code> 的移动端适配
+- 自研 Carousel 组件（替代 Swiper.js）</p>
+<p><strong>从 React 版可借鉴的工程化做法</strong>：
+- 虚拟滚动（<code>@tanstack/react-virtual</code>）—— 只渲染可见项，长列表性能关键
+- <code>react-intersection-observer</code> 自动播放/暂停
+- 乐观更新（optimistic update）：点赞立刻变 UI，再同步后端
+- Cursor-based 分页（<code>nextCursor</code>），不用 offset</p>
+<h3 id="52">5.2 毛玻璃 &amp; 高级动画技术选型 ⭐</h3>
+<table>
+<thead>
+<tr>
+<th>库</th>
+<th>体积</th>
+<th>License</th>
+<th>商用</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>GSAP</strong></td>
+<td>~23KB core</td>
+<td>标准"免费"许可</td>
+<td>✅ <strong>100% 免费含商用</strong>（Webflow 收购后全部插件免费：SplitText / MorphSVG / ScrollTrigger）<sup class="fn-ref"><a href="#fn-5" id="fnref-5">5</a></sup></td>
+<td>复杂时间轴、滚动驱动动画、文字分割</td>
+</tr>
+<tr>
+<td><strong>Motion</strong>（原 Framer Motion）</td>
+<td>34KB / LazyMotion 4.6KB</td>
+<td>MIT</td>
+<td>✅</td>
+<td>React 声明式动画、布局动画、手势、<code>AnimatePresence</code></td>
+</tr>
+<tr>
+<td><strong>Lenis</strong></td>
+<td>~2KB</td>
+<td>MIT</td>
+<td>✅</td>
+<td>丝滑滚动基底，Awwwards 获奖站标配</td>
+</tr>
+<tr>
+<td>Locomotive Scroll v5</td>
+<td>9.4KB</td>
+<td>MIT</td>
+<td>✅</td>
+<td>视差，v5 基于 Lenis</td>
+</tr>
+<tr>
+<td>Theatre.js</td>
+<td>生产仅 core</td>
+<td>Apache-2.0</td>
+<td>✅</td>
+<td>电影级 3D 关键帧，带浏览器内编辑器</td>
+</tr>
+</tbody>
+</table>
+<p><strong>性能铁律</strong>（做毛玻璃必须遵守，否则掉帧）<sup class="fn-ref"><a href="#fn-6" id="fnref-6">6</a></sup>：</p>
+<div class="code-wrap"><span class="code-lang">css</span><div class="code-wrap"><code class="language-css"></div>/* 只有这 4 个属性是 GPU 合成，不触发 layout / paint */
+transform, opacity, filter, backdrop-filter  ← 动画只动这 4 个
+</code></pre></div>
+<div class="code-wrap"><span class="code-lang">css</span><div class="code-wrap"><code class="language-css"></div>/* ❌ 触发 reflow */
+.box:hover { width: 200px; left: 100px; }
+/* ✅ GPU 合成 */
+.box:hover { transform: translateX(100px) scale(1.05); }
+</code></pre></div>
+<p>其他技巧：
+- <code>content-visibility: auto</code> 给首屏以下区块 → 跳过离屏渲染，首屏大幅提升
+- <code>IntersectionObserver</code> + 动态 <code>import()</code> → 重型库（GSAP）只在区块进入视口时才加载
+- 图片：<code>AVIF &gt; WebP &gt; JPEG</code> 级联，AVIF 同画质小 ~50%
+- 字体：<code>font-display: swap</code>
+- Speculation Rules API 预渲染 → 近乎瞬时的页面跳转</p>
+<h3 id="53-2026-6">5.3 2026 设计趋势（正好契合你的需求）<sup class="fn-ref"><a href="#fn-6" id="fnref-6">6</a></sup></h3>
+<ul>
+<li><strong>Apple Liquid Glass</strong>（WWDC 2025 发布）已验证 glassmorphism 是长期方向，不是一时风潮</li>
+<li><strong>Dark Glassmorphism</strong>：深色底 + 环境渐变光晕（ambient gradient orbs）→ 被列为 2026 标志性 UI 手法</li>
+<li>空间设计原则（visionOS）下沉到平面：<strong>z 轴分层 + 视差 + 光照 + 毛玻璃</strong> → 无需硬件也能做出纵深感</li>
+<li>超大字重动效排版（kinetic type）当主视觉</li>
+<li>有机形状 / 反网格布局 / 柔和渐变</li>
+</ul>
+<blockquote>
+<p><strong>给本项目的 UI 方向建议</strong>：GitHub 是"冷色 + 代码感 + 信息密度"，Apple 是"留白 + 大圆角 + 玻璃层 + 克制动效"。
+融合方式 = <strong>深色玻璃卡片作为仓库卡片的容器</strong>（Dark Glassmorphism），背景放缓慢流动的渐变光晕，卡片滚动时用 GSAP ScrollTrigger 做轻微 3D 倾斜视差。这既像抖音滑动，又有 Apple 高级感，还保留 GitHub 的信息层次。</p>
+</blockquote>
+<hr />
+<h2 id="b">六、其他平台推流机制调研（抖音/B站/快手/小红书/微信）</h2>
+<table>
+<thead>
+<tr>
+<th>平台</th>
+<th>开源情况</th>
+<th>有价值的参考</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>抖音/字节</strong></td>
+<td>Monolith（引擎，Apache-2.0，已归档）、ByteHTAP（HTAP 数据库，实时 OLTP+OLAP 一库两用）、Kitex（Go RPC，比 gRPC 快 30%）、火山引擎 ML Platform</td>
+<td>Monolith 的<strong>实时训练</strong>理念 + <strong>无碰撞嵌入</strong></td>
+</tr>
+<tr>
+<td><strong>快手</strong></td>
+<td>⭐ <code>Kuaishou-OneRec/OpenOneRec</code>（Apache-2.0）、TagCF（NeurIPS 2025，<a href="https://github.com/Code2Q/TagCF">Code2Q/TagCF</a>）、KuaiRec 数据集</td>
+<td><strong>生成式推荐</strong>：把推荐重构成序列建模</td>
+</tr>
+<tr>
+<td><strong>B站</strong></td>
+<td>❌ 无官方推荐算法开源。社区有炼丹炉相关爬虫/分析项目</td>
+<td>B 站排行榜数据（你已有的 vocabili.top 经验可复用）</td>
+</tr>
+<tr>
+<td><strong>小红书</strong></td>
+<td>❌ 无官方开源</td>
+<td>社区爬虫项目居多，风险高</td>
+</tr>
+<tr>
+<td><strong>微信视频号</strong></td>
+<td>❌ 无官方开源</td>
+<td>无</td>
+</tr>
+</tbody>
+</table>
+<h3 id="openonerec">快手 OpenOneRec —— 值得重点看一眼（学术前沿）</h3>
+<p>这是调研里<strong>技术含量最高</strong>的项目：</p>
+<table>
+<thead>
+<tr>
+<th>项目信息</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>仓库</td>
+<td><a href="https://github.com/Kuaishou-OneRec/OpenOneRec"><code>Kuaishou-OneRec/OpenOneRec</code></a></td>
+</tr>
+<tr>
+<td>License</td>
+<td><strong>代码 Apache-2.0</strong> ✅ / ⚠️ <strong>模型权重另有单独协议，需单独审查</strong></td>
+</tr>
+<tr>
+<td>模型</td>
+<td>OneRec-1.7B / 8B（基于 Qwen3），另有 Pro 版本用快手内部千亿 token 语料</td>
+</tr>
+<tr>
+<td>数据</td>
+<td>RecIF-Bench：<strong>1 亿交互 / 20 万用户</strong>，覆盖短视频、广告、电商三域</td>
+</tr>
+<tr>
+<td>核心思路</td>
+<td><strong>把推荐重构为序列建模</strong> —— item 用分层向量量化（RVQ）转成 "Itemic Tokens"，然后交给 LLM 做 next-token prediction</td>
+</tr>
+</tbody>
+</table>
+<p><strong>它给我们的启示</strong>（不一定用得上的，但思路值钱）：</p>
+<p>传统的推荐是「召回→排序」的漏斗；OpenOneRec 直接把推荐变成 <strong>"给 LLM 一段用户行为序列，让它预测下一个 item"</strong>。</p>
+<p>对应到我们的项目：</p>
+<div class="code-wrap"><code>输入：用户最近看过的仓库序列 + 用户画像
+     [repo:torch, repo:vite, repo:three.js, ...]
+输出：下一个可能感兴趣的仓库
+</code></pre></div>
+<blockquote>
+<p>💡 <strong>但要注意</strong>：这东西需要 GPU 训练 + 大量数据，<strong>对本地/个人项目过重</strong>。建议：<strong>理念上借鉴（序列建模、LLM 生成推荐理由），实现上不上这套模型</strong>。</p>
+<p>真正低成本能落地的是它的 <strong>Layer 3「推理能力」—— 让模型生成"为什么推荐给你"的自然语言理由</strong>。这个用现成的 LLM API（你已有的 DeepSeek API 经验）就能做，而且体验极好：推荐流里每张卡片下面写一句 "因为你最近在看 3D 渲染相关的仓库，这个项目的 WebGL 实现很巧"。</p>
+</blockquote>
+<p>TagCF（快手 + 武大，NeurIPS 2025）的思路也很有价值：<strong>从"猜你喜欢什么内容"升级到"理解你是谁"</strong> —— 引入 <strong>user role（用户角色）</strong> 建模。"啤酒-新晋奶爸-尿布"的经典案例：不是啤酒和尿布相关，而是背后有"新晋奶爸"这个<strong>用户角色</strong>在起作用。这也解释了为什么强关联建模能<strong>突破信息茧房</strong>。</p>
+<p>映射到我们：不是「Python 仓库和 ML 仓库相关」，而是「<strong>这个用户是个在做 LLM 应用的学生开发者</strong>」。</p>
+<hr />
+<h2 id="_3">七、架构设计建议</h2>
+<h3 id="71">7.1 推荐的架构（前后端分离 + 企业级做法）</h3>
+<div class="code-wrap"><code>┌─────────────────────────────────────────────────────────────┐
+│  前端 (独立部署)                                              │
+│  React 19 + TypeScript + Vite + Tailwind v4                  │
+│  ├─ GSAP + Motion + Lenis      ← 动画与毛玻璃                │
+│  ├─ @tanstack/react-virtual    ← 虚拟滚动                    │
+│  └─ Zustand / TanStack Query   ← 状态与请求缓存              │
+└──────────────────────┬──────────────────────────────────────┘
+                       │ REST / SSE (JSON)
+┌──────────────────────┴──────────────────────────────────────┐
+│  后端 (独立部署)                                              │
+│  FastAPI 或 Flask + SQLAlchemy                                │
+│  ├─ 推流引擎：召回 → 粗排 → 精排 → 重排                        │
+│  ├─ 行为埋点接收 (view/like/comment/star 同步)                │
+│  ├─ GitHub API 客户端 (含 token 池 + 限流)                    │
+│  └─ 后台任务：Celery / APScheduler 定时快照 star 数            │
+└──────────────────────┬──────────────────────────────────────┘
+                       │
+        ┌──────────────┴──────────────┐
+        │                             │
+   ┌────┴─────┐              ┌────────┴────────┐
+   │ SQLite   │              │ Redis (可选)     │
+   │ /Postgres│              │ 缓存 + 限流计数   │
+   │ 用户行为 │              │ 热榜 ZSET        │
+   │ 仓库元数据│              └─────────────────┘
+   │ star快照 │
+   └──────────┘
+        ↑
+   ┌────┴─────────────────────────┐
+   │ TrendPulse 爬虫 (你已有的)     │
+   │ 负责仓库发现 &amp; 元数据补齐       │
+   └──────────────────────────────┘
+</code></pre></div>
+<h3 id="72-sql">7.2 数据表设计（SQL 方案）</h3>
+<div class="code-wrap"><span class="code-lang">sql</span><div class="code-wrap"><code class="language-sql"></div>-- 用户
+users(id, username, password_hash, avatar_url, github_token_enc,
+      created_at, last_active_at)
+
+-- 仓库（核心实体）
+repos(id, owner, name, full_name UNIQUE, description, readme_md,
+      language, topics_json, license_spdx, homepage,
+      stars, forks, watchers, open_issues, contributors_count,
+      has_ci, has_tests, created_at_gh, pushed_at_gh,
+      -- 我们自己算的分
+      forgotten_score REAL, quality_score REAL,
+      first_seen_at, last_refreshed_at)
+
+-- star 历史快照 ← 算 Star Velocity 的关键，没有它就只能用降级公式
+repo_star_snapshots(id, repo_id, stars, captured_at)
+  INDEX (repo_id, captured_at)
+
+-- 用户行为（推流算法唯一的数据来源）
+user_events(id, user_id, repo_id, event_type, weight,
+            dwell_ms, scroll_depth, source_channel, created_at)
+  INDEX (user_id, created_at)
+  INDEX (repo_id, event_type)
+-- event_type: impression|view|like|unlike|detail_open|star_click|
+--             comment|share|search|follow_owner|skip
+-- weight: 每个事件的权重（见 7.3）
+
+-- 点赞（用户要求的&quot;网页端记录&quot;）
+likes(user_id, repo_id, created_at, PRIMARY KEY(user_id, repo_id))
+
+-- 收藏 = 同步 GitHub star
+stars(user_id, repo_id, gh_starred BOOLEAN, synced_at,
+      PRIMARY KEY(user_id, repo_id))
+
+-- 评论 = 同步 GitHub Discussion/Issue
+comments(id, repo_id, user_id, gh_discussion_id, gh_comment_id,
+         body, created_at)
+
+-- 用户兴趣画像（定期重算）
+user_profiles(user_id, top_languages_json, top_topics_json,
+              affinity_owners_json, updated_at)
+
+-- 推荐曝光记录（用于去重 + 效果分析）
+feed_impressions(id, user_id, repo_id, rank, score,
+                 channel, shown_at, clicked_at)
+</code></pre></div>
+<h3 id="73">7.3 事件权重表（仿抖音的核心参数）</h3>
+<div class="code-wrap"><span class="code-lang">python</span><div class="code-wrap"><code class="language-python"></div>EVENT_WEIGHTS = {
+    &quot;impression&quot;:    0.0,    # 只曝光不点击 = 负信号（分母）
+    &quot;skip&quot;:         -1.0,    # 划走 = 强负反馈
+    &quot;view&quot;:          0.5,    # 打开详情
+    &quot;dwell_10s&quot;:     1.0,    # 停留 10 秒
+    &quot;read_readme&quot;:   2.0,    # 滚动 README 超过 50% ← 我们的&quot;完播率&quot;
+    &quot;open_files&quot;:    2.5,    # 打开了源码文件
+    &quot;like&quot;:          4.0,    # 网页端点赞
+    &quot;star_click&quot;:    6.0,    # 点了去 GitHub star ← 我们的&quot;收藏&quot;
+    &quot;comment&quot;:       5.0,    # 评论
+    &quot;share&quot;:         5.0,    # 分享
+    &quot;follow_owner&quot;:  7.0,    # 关注作者 ← 最强正反馈
+}
+</code></pre></div>
+<h3 id="74">7.4 冷启动策略（老仓库 &amp; 新仓库都要推）</h3>
+<p>用户明确要求「老仓库或新仓库都要推」，这需要<strong>多路召回</strong>并行：</p>
+<table>
+<thead>
+<tr>
+<th>召回通路</th>
+<th>面向</th>
+<th>逻辑</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>① 兴趣召回</td>
+<td>主力</td>
+<td>协同过滤 / 标签匹配（用户 topics ↔ 仓库 topics）</td>
+</tr>
+<tr>
+<td>② <strong>遗珠召回</strong></td>
+<td>⭐ 本项目特色</td>
+<td><code>forgotten_score</code> 高分但曝光极少的仓库</td>
+</tr>
+<tr>
+<td>③ 热榜召回</td>
+<td>大众</td>
+<td>Star Velocity 榜（不是总 star 榜）</td>
+</tr>
+<tr>
+<td>④ 新鲜召回</td>
+<td>新仓库</td>
+<td><code>created_at</code> 近 7 天 + 质量分达标</td>
+</tr>
+<tr>
+<td>⑤ 关注召回</td>
+<td>老用户</td>
+<td>已 follow 的 owner 的新动作</td>
+</tr>
+<tr>
+<td>⑥ 探索召回</td>
+<td>所有人</td>
+<td>随机 + 多样性打散（15% 槽位）</td>
+</tr>
+<tr>
+<td>⑦ 相似召回</td>
+<td>有历史</td>
+<td>"看了 A 的人也在看 B"（item-based CF）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>冷启动三重保障</strong>：
+1. <strong>新用户</strong>：先给 3~5 个「热门 + 质量高 + 覆盖不同语言」的仓库摸底，快速建立初始画像
+2. <strong>新仓库</strong>：没有行为数据 → 用 <strong>内容特征</strong>（topics / README embedding）走内容召回，而不是协同过滤
+3. <strong>老仓库</strong>：<code>forgotten_score</code> 通路专门覆盖</p>
+<hr />
+<h2 id="license">八、License 与合规风险清单 ⚠️</h2>
+<p>你说"给我看一下，我看一下然后下" —— 这里把每个候选的协议讲清楚：</p>
+<h3 id="_4">✅ 可以放心用（宽松协议）</h3>
+<table>
+<thead>
+<tr>
+<th>仓库</th>
+<th>协议</th>
+<th>可商用</th>
+<th>可改</th>
+<th>需保留版权声明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>bytedance/monolith</code></td>
+<td>Apache-2.0</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>Kuaishou-OneRec/OpenOneRec</code></td>
+<td>Apache-2.0（代码）</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>jasperan/discover-github</code></td>
+<td>UPL-1.0 + Apache-2.0</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>motiondivision/motion</code></td>
+<td>MIT</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>darkroomengineering/lenis</code></td>
+<td>MIT</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>greensock/GSAP</code></td>
+<td>标准免费许可</td>
+<td>✅ 含商用</td>
+<td>✅</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>HipsterZipster/react-tiktok-style-video-scroller</code></td>
+<td>MIT</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_5">⚠️ 有坑，要小心</h3>
+<table>
+<thead>
+<tr>
+<th>仓库</th>
+<th>问题</th>
+<th>处理建议</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>zyronon/douyin</code></td>
+<td>README 明确 <strong>"不得用于商业使用"</strong>，且仓库未标 SPDX</td>
+<td><strong>只看交互思路，代码一行不抄</strong>。自己用 React 重写</td>
+</tr>
+<tr>
+<td><code>Kuaishou-OneRec/OpenOneRec</code></td>
+<td>代码 Apache-2.0，但<strong>模型权重协议未明确</strong></td>
+<td>只用代码框架，<strong>不要用它的模型权重</strong></td>
+</tr>
+<tr>
+<td><code>blacckoscar/SOCIAL-ALGORITHM</code></td>
+<td><strong>无 LICENSE 文件</strong> → 默认「保留所有权利」</td>
+<td><strong>只读算法公式（思路不受版权保护），代码不抄</strong></td>
+</tr>
+<tr>
+<td><code>alibaba/DeepRec</code></td>
+<td>基于 TensorFlow 老版本，维护状态需确认</td>
+<td>依赖过重，<strong>不建议引入</strong></td>
+</tr>
+<tr>
+<td><code>NicolasHug/Surprise</code></td>
+<td>BSD-3（宽松）但已进入维护模式</td>
+<td>可用，但只是经典 CF，不必依赖</td>
+</tr>
+<tr>
+<td>各平台爬虫项目</td>
+<td>违反平台 ToS，可能有法律风险</td>
+<td><strong>不要集成到产品里</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="_6">🔴 命名与品牌风险（最容易翻车的地方）</h3>
+<p>你说"不要侵权，比如去法庭这样的" —— 这条要当真：</p>
+<table>
+<thead>
+<tr>
+<th>风险项</th>
+<th>建议</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>用「抖音」「TikTok」品牌名</td>
+<td>❌ 绝对不要出现在项目名、Logo、域名、宣传语里</td>
+</tr>
+<tr>
+<td>复刻抖音的<strong>视觉识别</strong>（那个音符 Logo、特定配色组合）</td>
+<td>❌ 商标侵权风险</td>
+</tr>
+<tr>
+<td>使用抖音的音频/视频素材</td>
+<td>❌ 版权侵权</td>
+</tr>
+<tr>
+<td>项目描述里写"仿抖音"</td>
+<td>⚠️ 可以写 "<em>TikTok-style feed</em>" 作为技术风格描述，但不要暗示关联或合作</td>
+</tr>
+<tr>
+<td>建议的项目定位</td>
+<td>✅ 强调「<strong>开源的、非营利的、为开源社区服务的</strong> ✅ 仓库发现平台」</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>安全牌</strong>：把项目定位成 <strong>"GitHub Repository Discovery Feed"</strong>，风格描述用 <em>"short-video-feed-style interaction"</em>（交互风格属于通用设计语言，不受保护），而不是 <em>"TikTok Clone"</em>。</p>
+</blockquote>
+<hr />
+<h2 id="_7">九、竞品/同类调研（我们和它们的区别）</h2>
+<table>
+<thead>
+<tr>
+<th>产品</th>
+<th>形式</th>
+<th>我们的差异点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GitHub Trending</td>
+<td>榜单页</td>
+<td>我们是个性化信息流，且专门救"遗珠"</td>
+</tr>
+<tr>
+<td>GitHub Explore</td>
+<td>编辑推荐</td>
+<td>我们是算法驱动 + 用户行为反馈</td>
+</tr>
+<tr>
+<td>Star History / OSS Insight</td>
+<td>数据图表</td>
+<td>我们不分析，我们<strong>分发</strong></td>
+</tr>
+<tr>
+<td>Hacker News / Product Hunt</td>
+<td>榜单</td>
+<td>我们按个人兴趣，不按当日热榜</td>
+</tr>
+<tr>
+<td><code>jasperan/discover-github</code></td>
+<td>CLI 工具</td>
+<td>它是给你生成推文，我们是产品化 Feed</td>
+</tr>
+<tr>
+<td>TrendPulse（你自己的）</td>
+<td>Trending 分析平台</td>
+<td>TrendPulse 是<strong>数据侧</strong>，本项目是<strong>分发侧</strong> —— <strong>可以复用爬虫层！</strong></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>💡 <strong>重要协同点</strong>：你的 TrendPulse 已经有 GitHub trending 数据抓取 + 后端 + SQLite 了。本项目可以直接把它当作 <strong>数据供应层</strong>（召回池的来源），避免重复造轮子。建议把本项目做成 TrendPulse 的"消费端"，或者抽一个共享的 <code>github-data-service</code>。</p>
+</blockquote>
+<hr />
+<h2 id="a-b-c">十、下一步：A / B / C 三条路</h2>
+<p>调研阶段结束，接下来该定方向了。给你三个选项：</p>
+<h3 id="a">选项 A：最小可行版（推荐起步）✅</h3>
+<p><strong>周期</strong>：短
+<strong>做什么</strong>：
+1. 用 TrendPulse 的爬虫层产出一个仓库池（先用 JSON 也行，不急着上 SQL）
+2. 后端只实现<strong>一路召回 + 一个加权打分公式</strong>（就用 SOCIAL-ALGORITHM 那套改写）
+3. 前端 React + Tailwind + <strong>GSAP 毛玻璃卡片</strong>，做垂直滑动的信息流
+4. 只做 4 个行为：曝光 / 停留 / 点赞 / 跳转 star</p>
+<p><strong>优点</strong>：快速看到效果，UI 先惊艳起来，算法后续迭代
+<strong>风险</strong>：几乎没有</p>
+<h3 id="b_1">选项 B：完整架构版</h3>
+<p><strong>周期</strong>：中长
+<strong>做什么</strong>：按第七章的架构全量落地 —— 7 路召回 + 四级漏斗 + 用户画像 + 埋点体系 + 后台任务 + 完整 SQL 表
+<strong>优点</strong>：一步到位，符合"企业级做法"要求
+<strong>风险</strong>：前期投入大，没见到效果前容易失去动力（你自己也说了"开发者兴趣消亡"是最大敌人 😄）</p>
+<h3 id="c">选项 C：先做算法原型</h3>
+<p><strong>周期</strong>：短
+<strong>做什么</strong>：纯命令行/Python，先把<strong>召回+排序算法</strong>跑通，用假数据验证 <code>forgotten_score</code> 能不能真的把遗珠仓库挑出来
+<strong>优点</strong>：验证核心创新点是否成立，成本最低
+<strong>风险</strong>：没有 UI，看不到"抖音感"</p>
+<hr />
+<h2 id="a-clone">附录 A：一键可下载的仓库清单（你手动 clone 用）</h2>
+<blockquote>
+<p>家里网不好，用 <code>git clone --depth 1</code> 只拉最新快照，体积小很多。</p>
+</blockquote>
+<h3 id="_8">必看（读思路，代码不一定抄）</h3>
+<div class="code-wrap"><span class="code-lang">bash</span><div class="code-wrap"><code class="language-bash"></div># 1. 抖音式信息流算法（Go，算法讲得最清楚）——⚠️ 无 LICENSE，只读
+git clone --depth 1 https://github.com/blacckoscar/SOCIAL-ALGORITHM.git
+
+# 2. 字节推荐引擎（Apache-2.0）—— 读设计理念，别编译
+git clone --depth 1 https://github.com/bytedance/monolith.git
+
+# 3. GitHub 多信号评分引擎（Apache-2.0/UPL）—— Star Velocity 权重表在这里
+git clone --depth 1 https://github.com/jasperan/discover-github.git
+
+# 4. 快手生成式推荐（Apache-2.0 代码）—— 看&quot;LLM 做推荐&quot;的思路
+git clone --depth 1 https://github.com/Kuaishou-OneRec/OpenOneRec.git
+
+# 5. 快手 TagCF（NeurIPS 2025）—— user role 建模，突破信息茧房
+git clone --depth 1 https://github.com/Code2Q/TagCF.git
+</code></pre></div>
+<h3 id="ui-douyin">UI 参考（⚠️ douyin 禁止商用，只看不抄）</h3>
+<div class="code-wrap"><span class="code-lang">bash</span><div class="code-wrap"><code class="language-bash"></div># 6. 抖音克隆（Vue3，10.9k★）—— ⚠️ 明确禁止商用！只学交互
+git clone --depth 1 https://github.com/zyronon/douyin.git
+
+# 7. React 版垂直视频流组件（MIT）—— 可商用，虚拟滚动范式
+git clone --depth 1 https://github.com/HipsterZipster/react-tiktok-style-video-scroller.git
+</code></pre></div>
+<h3 id="npm-clone">直接装依赖（npm，不用 clone）</h3>
+<div class="code-wrap"><span class="code-lang">bash</span><div class="code-wrap"><code class="language-bash"></div>npm install gsap @gsap/react          # 动画（100% 免费含商用）
+npm install motion                    # React 动画
+npm install lenis                     # 丝滑滚动
+npm install @tanstack/react-virtual   # 虚拟滚动（性能关键）
+npm install react-intersection-observer
+</code></pre></div>
+<h3 id="_9">数据集（想玩真的排序算法时用）</h3>
+<div class="code-wrap"><span class="code-lang">bash</span><div class="code-wrap"><code class="language-bash"></div># 快手真实短视频数据集 KuaiRec（学术数据集，免费）
+git clone --depth 1 https://github.com/flaviengeoffray/kuaiShou-video-recommendation-systems.git
+</code></pre></div>
+<hr />
+<h2 id="b_2">附录 B：参考来源</h2>
+<hr />
+<blockquote>
+<p>📌 <strong>提醒</strong>：本项目最终以 MIT 协议开源，但<strong>参考的第三方仓库协议不变</strong> —— 引用他人思路时请在 README 中注明致谢，复制代码时必须保留原协议与版权声明。</p>
+</blockquote>
+<section class="footnotes"><h2>参考来源</h2><ol><li id="fn-1">[The Important Truth: TikTok's Recommendation Engine is on GitHub—But the 'Secret Sauce' is Not — note.com](<a href="https://note.com/open_hippo6440/n/n112423d24b67?hl=en" target="_blank" rel="noopener">https://note.com/open_hippo6440/n/n112423d24b67?hl=en</a>) —— 实测验证了 Monolith 的 LICENSE 文件为 Apache-2.0、2025-10 归档、以及抖音官方 2020-06-18 的信号说明。 <a class="fn-back" href="#fnref-1">↩</a></li><li id="fn-2">[nakamasato/monolith fork 的实测记录](<a href="https://github.com/nakamasato/monolith" target="_blank" rel="noopener">https://github.com/nakamasato/monolith</a>) —— 记录了 demo 运行时的 segmentation fault 与 streaming 模式未支持情况。 <a class="fn-back" href="#fnref-2">↩</a></li><li id="fn-3">[jasperan/discover-github](<a href="https://github.com/jasperan/discover-github" target="_blank" rel="noopener">https://github.com/jasperan/discover-github</a>) —— 6 信号突围评分引擎（Star Velocity 30%），UPL-1.0 + Apache-2.0 双协议。 <a class="fn-back" href="#fnref-3">↩</a></li><li id="fn-4">[从零构建GitHub热榜系统：API调用、热度算法与自动化实践 — CSDN](<a href="https://blog.csdn.net/weixin_28681255/article/details/163839879" target="_blank" rel="noopener">https://blog.csdn.net/weixin_28681255/article/details/163839879</a>) —— 热度分数公式与数据清洗策略。 <a class="fn-back" href="#fnref-4">↩</a></li><li id="fn-5">[greensock/GSAP](<a href="https://github.com/greensock/GSAP" target="_blank" rel="noopener">https://github.com/greensock/GSAP</a>) —— 官方 README 明确 "GSAP is now 100% FREE including ALL of the bonus plugins... even for commercial use"（Webflow 收购后）。 <a class="fn-back" href="#fnref-5">↩</a></li><li id="fn-6">[Award-Winning Websites 2025-2030 Reference](<a href="https://github.com/coroboros/research/blob/main/articles/award-winning-websites-2025-2030/award-winning-websites-2025-2030.md" target="_blank" rel="noopener">https://github.com/coroboros/research/blob/main/articles/award-winning-websites-2025-2030/award-winning-websites-2025-2030.md</a>) —— 动画库对比、GPU 合成四属性、Apple Liquid Glass、Dark Glassmorphism 趋势。 <a class="fn-back" href="#fnref-6">↩</a></li><li id="fn-7">[zyronon/douyin](<a href="https://github.com/zyronon/douyin" target="_blank" rel="noopener">https://github.com/zyronon/douyin</a>) —— Vue3 + Vite5 + Pinia，README 明确"仅适用于学习和研究，不得用于商业使用"。 <a class="fn-back" href="#fnref-7">↩</a></li><li id="fn-8">[Kuaishou-OneRec/OpenOneRec](<a href="https://github.com/Kuaishou-OneRec/OpenOneRec" target="_blank" rel="noopener">https://github.com/Kuaishou-OneRec/OpenOneRec</a>) + [OneRec 技术报告笔记](<a href="https://arthurchiao.art/blog/openonerec-tech-report-notes-zh/" target="_blank" rel="noopener">https://arthurchiao.art/blog/openonerec-tech-report-notes-zh/</a>) —— Itemic Tokens、RecIF-Bench、四层能力体系。 <a class="fn-back" href="#fnref-8">↩</a></li></ol></section>
+    </main>
+  </div>
+</div>
+
+<script>
+// 滚动进度
+const bar = document.getElementById('bar');
+let raf = null;
+addEventListener('scroll', () => {
+  if (raf) return;
+  raf = requestAnimationFrame(() => {
+    const h = document.documentElement;
+    const p = h.scrollTop / (h.scrollHeight - h.clientHeight || 1);
+    bar.style.width = (p * 100).toFixed(2) + '%';
+    raf = null;
+  });
+}, { passive: true });
+
+// 表格自动包一层滚动容器（移动端可横向滑）
+document.querySelectorAll('.main table').forEach(t => {
+  if (t.parentElement.classList.contains('table-scroll')) return;
+  const w = document.createElement('div');
+  w.className = 'table-scroll';
+  t.parentNode.insertBefore(w, t);
+  w.appendChild(t);
+});
+
+// 滚动进入视口时渐显（IntersectionObserver，不阻塞首屏）
+if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  const els = document.querySelectorAll('.main > *');
+  els.forEach(el => { el.style.animation = 'none'; el.style.opacity = '0'; });
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((e, i) => {
+      if (e.isIntersecting) {
+        e.target.style.animation = `rise .6s cubic-bezier(.2,.7,.3,1) ${Math.min(i*0.05,0.3)}s forwards`;
+        io.unobserve(e.target);
+      }
+    });
+  }, { rootMargin: '0px 0px -8% 0px', threshold: 0.01 });
+  els.forEach(el => io.observe(el));
+}
+
+// 目录当前章节高亮
+const links = [...document.querySelectorAll('.toc-link')];
+const heads = [...document.querySelectorAll('.main h2[id]')];
+if (links.length && heads.length) {
+  const hio = new IntersectionObserver((es) => {
+    es.forEach(e => {
+      if (e.isIntersecting) {
+        links.forEach(l => l.style.background = '');
+        const id = e.target.id;
+        const a = links.find(l => l.getAttribute('href') === '#' + id);
+        if (a) { a.style.background = 'var(--glass-strong)'; a.style.color = 'var(--txt)'; }
+      }
+    });
+  }, { rootMargin: '-12% 0px -76% 0px' });
+  heads.forEach(h => hio.observe(h));
+}
+</script>
+</body>
+</html>
