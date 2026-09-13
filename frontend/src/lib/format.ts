@@ -62,16 +62,16 @@ export function langColor(lang: string | null | undefined): string {
   return LANG_COLORS[lang] ?? '#8b8b9a'
 }
 
-/** 许可证风险 → 展示文案与配色 */
+/** 许可证风险 → 展示文案与配色（浅色语义 tint） */
 export function licenseBadge(
   spdx: string | null,
   risk: string | null,
 ): { text: string; cls: string } | null {
   if (!spdx) return null
   const map: Record<string, string> = {
-    safe: 'text-risk-safe border-risk-safe/40 bg-risk-safe/10',
-    caution: 'text-risk-caution border-risk-caution/40 bg-risk-caution/10',
-    danger: 'text-risk-danger border-risk-danger/40 bg-risk-danger/10',
+    safe: 'text-risk-safe border-risk-safe/35 bg-risk-safe/[0.08]',
+    caution: 'text-risk-caution border-risk-caution/35 bg-risk-caution/[0.08]',
+    danger: 'text-risk-danger border-risk-danger/35 bg-risk-danger/[0.08]',
   }
   return {
     text: spdx,
@@ -92,18 +92,18 @@ export function isForgotten(score: number | null | undefined): boolean {
   return (score ?? 0) >= FORGOTTEN_THRESHOLD
 }
 
-/** 流量池等级 → 名称与配色 */
+/** 流量池等级 → 名称与配色（浅色语义） */
 export function poolBadge(level: number | null): {
   name: string
   cls: string
 } {
   const map: Record<number, { name: string; cls: string }> = {
-    [-1]: { name: '已淘汰', cls: 'text-white/40 border-white/15' },
-    0: { name: '冷启动', cls: 'text-white/60 border-white/20' },
-    1: { name: '基础池', cls: 'text-accent border-accent/40' },
-    2: { name: '中级池', cls: 'text-accent-glow border-accent-glow/40' },
-    3: { name: '高级池', cls: 'text-gem border-gem/40' },
-    4: { name: '爆款池', cls: 'text-gem-soft border-gem-soft/50' },
+    [-1]: { name: '已淘汰', cls: 'text-ink-faint border-hairline' },
+    0: { name: '冷启动', cls: 'text-ink-muted border-hairline' },
+    1: { name: '基础池', cls: 'text-accent border-accent/35' },
+    2: { name: '中级池', cls: 'text-accent border-accent/35' },
+    3: { name: '高级池', cls: 'text-gem border-gem/35' },
+    4: { name: '爆款池', cls: 'text-gem-soft border-gem-soft/45' },
   }
   return map[level ?? 0] ?? map[0]
 }

@@ -23,7 +23,8 @@ const SORTS: { key: SortKey; label: string }[] = [
 const PAGE = 12
 
 /**
- * 搜索面板。
+ * 搜索面板 —— 浅色满屏浮层 + Apple search-input 语法
+ * （白底胶囊、44px 高、发丝线描边）。
  *
  * 交互设计参考抖音搜索：
  *   · 打开即聚焦输入框，自动弹出热门词（冷启动指引）
@@ -132,11 +133,11 @@ const SearchPanel: FC<Props> = ({ userId, open, onClose, onOpenDetail }) => {
   if (!open) return null
 
   return (
-    <div className="absolute inset-0 z-50 bg-ink-900/95 backdrop-blur-glass flex flex-col animate-slide-up">
-      {/* ── 搜索框 ── */}
+    <div className="absolute inset-0 z-50 bg-parchment flex flex-col animate-slide-up">
+      {/* ── 搜索框（search-input：白胶囊 + 发丝线 + 44px）── */}
       <div className="safe-t shrink-0 px-4 pt-3 pb-2">
         <div className="flex items-center gap-2">
-          <div className="glass-soft flex-1 flex items-center gap-2 rounded-full px-3.5 py-2">
+          <div className="flex-1 flex items-center gap-2.5 bg-canvas border border-hairline rounded-full px-4 h-11">
             <SearchIcon />
             <input
               ref={inputRef}
@@ -147,14 +148,14 @@ const SearchPanel: FC<Props> = ({ userId, open, onClose, onOpenDetail }) => {
                 if (e.key === 'Escape') onClose()
               }}
               placeholder="搜仓库、技术方向、语言…"
-              className="flex-1 bg-transparent outline-none text-[14px] text-white
-                         placeholder:text-white/30"
+              className="flex-1 bg-transparent outline-none text-[14px] text-ink
+                         placeholder:text-ink-faint"
               autoComplete="off"
               spellCheck={false}
             />
             {q && (
               <button
-                className="text-white/35 hover:text-white/70 text-[16px] leading-none"
+                className="text-ink-faint hover:text-ink-soft text-[16px] leading-none"
                 onClick={() => {
                   setQ('')
                   setResults([])
@@ -166,12 +167,15 @@ const SearchPanel: FC<Props> = ({ userId, open, onClose, onOpenDetail }) => {
               </button>
             )}
           </div>
-          <button className="btn-ghost shrink-0" onClick={onClose}>
+          <button
+            className="text-[14px] text-accent px-1 shrink-0 active:opacity-60"
+            onClick={onClose}
+          >
             取消
           </button>
         </div>
 
-        {/* 排序 */}
+        {/* 排序 —— configurator-option-chip 语法：选中态描边升级 */}
         <div className="flex gap-1.5 mt-2.5">
           {SORTS.map((s) => (
             <button
@@ -179,15 +183,15 @@ const SearchPanel: FC<Props> = ({ userId, open, onClose, onOpenDetail }) => {
               onClick={() => setSort(s.key)}
               className={`chip border transition-colors ${
                 sort === s.key
-                  ? 'bg-accent/20 border-accent/50 text-accent-glow'
-                  : 'bg-white/[0.04] border-white/[0.08] text-white/45'
+                  ? 'bg-accent/[0.08] border-accent text-accent'
+                  : 'bg-canvas border-hairline text-ink-muted hover:text-ink-soft'
               }`}
             >
               {s.label}
             </button>
           ))}
           {total > 0 && (
-            <span className="chip text-white/30 ml-auto">
+            <span className="chip text-ink-faint ml-auto">
               共 {total} 个结果
             </span>
           )}
@@ -200,8 +204,8 @@ const SearchPanel: FC<Props> = ({ userId, open, onClose, onOpenDetail }) => {
           {suggests.map((s) => (
             <button
               key={s}
-              className="chip bg-white/[0.05] text-white/60 border border-white/[0.08]
-                         hover:bg-white/[0.1] hover:text-white/90 transition-colors"
+              className="chip bg-canvas text-ink-soft border border-hairline
+                         hover:bg-pearl hover:text-ink transition-colors"
               onClick={() => submit(s)}
             >
               {s}
@@ -217,7 +221,7 @@ const SearchPanel: FC<Props> = ({ userId, open, onClose, onOpenDetail }) => {
         className="flex-1 min-h-0 overflow-y-auto px-4 pb-6"
       >
         {error && (
-          <div className="text-center py-10 text-risk-danger/80 text-[13px]">
+          <div className="text-center py-10 text-risk-danger text-[13px]">
             {error}
           </div>
         )}
@@ -225,21 +229,21 @@ const SearchPanel: FC<Props> = ({ userId, open, onClose, onOpenDetail }) => {
         {/* 未搜索时展示热门词 */}
         {results.length === 0 && !searching && !error && (
           <div className="pt-2">
-            <p className="text-[12px] text-white/35 mb-2.5">大家在搜</p>
+            <p className="text-[12px] text-ink-muted mb-2.5">大家在搜</p>
             <div className="flex flex-wrap gap-1.5">
               {hots.map((h) => (
                 <button
                   key={h.word}
-                  className="chip bg-white/[0.05] text-white/65 border border-white/[0.08]
-                             hover:bg-white/[0.1] hover:text-white transition-colors"
+                  className="chip bg-canvas text-ink-soft border border-hairline
+                             hover:bg-pearl hover:text-ink transition-colors"
                   onClick={() => submit(h.word)}
                 >
                   {h.word}
-                  <span className="text-white/25 ml-1.5">{h.count}</span>
+                  <span className="text-ink-faint ml-1.5">{h.count}</span>
                 </button>
               ))}
               {hots.length === 0 && (
-                <span className="text-[12px] text-white/25">
+                <span className="text-[12px] text-ink-faint">
                   试试搜「rvc」「语音克隆」「量化」
                 </span>
               )}
@@ -247,38 +251,38 @@ const SearchPanel: FC<Props> = ({ userId, open, onClose, onOpenDetail }) => {
           </div>
         )}
 
-        {/* 结果列表 */}
+        {/* 结果列表 —— 白色工具卡（18px 圆角 + 发丝线，无阴影） */}
         {results.map((r, i) => (
           <button
             key={`${r.repo_id}-${i}`}
             onClick={() => onOpenDetail(r)}
-            className="w-full text-left glass-soft rounded-2xl p-3.5 mb-2.5
-                       hover:bg-white/[0.07] transition-colors"
+            className="w-full text-left card rounded-card p-3.5 mb-2.5
+                       hover:bg-pearl transition-colors"
           >
             <div className="flex items-center gap-2">
-              <span className="text-[14px] font-semibold text-white truncate">
+              <span className="text-[14px] font-semibold text-ink truncate">
                 {r.owner}/
-                <span className="text-accent-glow">{r.name}</span>
+                <span className="text-accent">{r.name}</span>
               </span>
               {isForgotten(r.forgotten_score) && (
-                <span className="chip border border-gem/40 bg-gem/12 text-gem shrink-0">
+                <span className="chip border border-gem/25 bg-gem/[0.08] text-gem shrink-0">
                   💎
                 </span>
               )}
-              <span className="ml-auto text-[11px] text-white/40 shrink-0">
+              <span className="ml-auto text-[11px] text-ink-muted shrink-0">
                 ★ {formatStars(r.stars)}
               </span>
             </div>
 
             {r.description && (
-              <p className="text-[12.5px] text-white/55 mt-1.5 line-clamp-2 leading-relaxed">
+              <p className="text-[12.5px] text-ink-muted mt-1.5 line-clamp-2 leading-relaxed">
                 {r.description}
               </p>
             )}
 
             <div className="flex items-center gap-1.5 mt-2 flex-wrap">
               {r.language && (
-                <span className="chip text-white/45">
+                <span className="chip text-ink-muted">
                   <span
                     className="h-1.5 w-1.5 rounded-full mr-1.5"
                     style={{ background: langColor(r.language) }}
@@ -289,7 +293,7 @@ const SearchPanel: FC<Props> = ({ userId, open, onClose, onOpenDetail }) => {
               {r.search_reasons.slice(0, 2).map((rs) => (
                 <span
                   key={rs}
-                  className="chip bg-accent/10 text-accent-glow/80 border border-accent/20"
+                  className="chip bg-accent/[0.08] text-accent border border-accent/20"
                 >
                   {rs}
                 </span>
@@ -299,13 +303,13 @@ const SearchPanel: FC<Props> = ({ userId, open, onClose, onOpenDetail }) => {
         ))}
 
         {searching && (
-          <div className="text-center py-6 text-[12px] text-white/30 animate-pulse">
+          <div className="text-center py-6 text-[12px] text-ink-faint animate-pulse">
             搜索中…
           </div>
         )}
 
         {!searching && results.length > 0 && !hasMore && (
-          <div className="text-center py-6 text-[12px] text-white/22">
+          <div className="text-center py-6 text-[12px] text-ink-faint">
             没有更多了
           </div>
         )}
@@ -323,7 +327,7 @@ const SearchIcon: FC = () => (
     stroke="currentColor"
     strokeWidth="2.2"
     strokeLinecap="round"
-    className="text-white/35 shrink-0"
+    className="text-ink-faint shrink-0"
   >
     <circle cx="11" cy="11" r="7" />
     <path d="m20 20-3.5-3.5" />

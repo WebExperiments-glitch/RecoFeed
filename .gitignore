@@ -25,6 +25,9 @@ dist/
 .env.local
 .env.*.local
 
+# ⚠️ LLM 密钥（OpenRouter key，严禁入库）
+backend/core/llm_local.json
+
 # 编辑器
 .vscode/
 .idea/
@@ -38,3 +41,17 @@ logs/
 # 数据缓存
 data/cache/
 data/raw/
+backend/core/auth_local.json
+
+# 日志（运行期产生）
+backend/*.log
+backend/**/*.log
+backend/*_log.txt
+backend/data/server.*.log
+
+# 第三方库源码（按需 pip install，不入库）
+Scrapling-main/
+Scrapling-main.zip
+
+# 数据集例外：随仓库提供，开箱即用（258 个真实 GitHub 仓库）
+!backend/data/recofeed.db

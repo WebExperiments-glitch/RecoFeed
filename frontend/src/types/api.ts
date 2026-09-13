@@ -208,6 +208,84 @@ export interface UserProfile {
   updated_at?: string
 }
 
+// ------------------------------------------------------------------ 自定义关键词 & 爬虫
+
+/** 用户自定义兴趣关键词（/api/user/keywords） */
+export interface CustomKeyword {
+  id: number
+  keyword: string
+  weight: number
+  created_at: string
+}
+
+export interface KeywordsResponse {
+  keywords: CustomKeyword[]
+}
+
+export interface CustomKeywordUpsert extends CustomKeyword {
+  /** false = 关键词已存在（幂等添加） */
+  inserted: boolean
+}
+
+/** 爬虫抓取结果（POST /api/queue/crawl） */
+export interface CrawlResult {
+  ok: boolean
+  keywords: string[]
+  found: number
+  new_repos: number
+  enqueued: number
+  details: { keyword: string; found: number; kept: number }[]
+}
+
+// ------------------------------------------------------------------ GitHub 登录 & 实证圈
+
+export interface SessionUser {
+  user_id: number
+  username: string
+  github_login: string | null
+  display_name: string | null
+  avatar_url: string | null
+}
+
+/** 单条实证记录（自建仓库 / 点星仓库） */
+export interface FootprintItem {
+  full_name: string
+  weight: number
+  /** 点星榜排名（starred 才有） */
+  rank?: number | null
+  /** 该仓库的星数 */
+  stars?: number
+  /** 自建仓库最近推送时间（owned 才有） */
+  pushed_at?: string | null
+}
+
+export interface FootprintSummary {
+  owned_count: number
+  starred_count: number
+  /** 强信号放大系数（"猛推"开关） */
+  boost: number
+  owned: FootprintItem[]
+  starred: FootprintItem[]
+}
+
+export interface MeResponse extends SessionUser {
+  footprint: FootprintSummary
+}
+
+export interface AuthStatus {
+  /** OAuth 是否已配置（没配置就只用令牌登录） */
+  configured: boolean
+  callback_url: string
+}
+
+export interface SyncResult {
+  owned: number
+  starred: number
+  owned_top: FootprintItem[]
+  starred_top: FootprintItem[]
+  footprint: FootprintSummary
+}
+
 // ------------------------------------------------------------------ 事件
 
 export type EventType =
@@ -228,6 +306,51 @@ export interface EventPayload {
   source_channel?: string
   batch_id?: string
   rank_position?: number
+}
+
+// ------------------------------------------------------------------ 翻译
+
+/** 仓库中文翻译（POST /api/repos/{id}/translate） */
+export interface TranslateResponse {
+  repo_id: number
+  /** 缓存命中（不消耗 API 额度） */
+  cached: boolean
+  /** true = 内容本身是中文/无内容，无需翻译 */
+  skipped?: boolean
+  reason?: string
+  zh_description: string | null
+  zh_readme: string | null
+  /** 实际使用的模型 */
+  model: string | null
+  /** README 超长被截断（只翻了开头部分） */
+  readme_truncated?: boolean
+  shared?: boolean
+}
+
+/** 翻译服务状态（GET /api/translate/status） */
+export interface TranslateStatus {
+  configured: boolean
+  models: string[]
+  used_last_minute: number
+  limit_per_minute: number
+  used_today: number
+  limit_per_day: number
+  remaining_today: number
+  cache_entries: number
+  model_cooldowns: { model: string; cooldown_left: number }[]
+  global_cooldown_left: number
+}
+
+/** 单张卡片的中文翻译（标题短译 + 描述译文），null 表示暂不可用 */
+export interface CardTranslation {
+  zh_name: string | null
+  zh_description: string | null
+}
+
+/** 批量描述翻译（POST /api/translate/batch）—— feed 卡片中文 */
+export interface BatchTranslateResponse {
+  /** key 是 repo_id 字符串 */
+  translations: Record<string, CardTranslation | null>
 }
 
 // ------------------------------------------------------------------ 通用

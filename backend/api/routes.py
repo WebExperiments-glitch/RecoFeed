@@ -30,6 +30,10 @@ API 一览：
     POST /api/user/profile/rebuild    重建画像
     GET  /api/user/events             行为流水（调试）
 
+    ── 翻译（OpenRouter 免费模型）──
+    POST /api/repos/{id}/translate    翻译仓库简介+README 为中文（带缓存/限流）
+    GET  /api/translate/status        翻译服务额度与冷却状态
+
     ── 调试 ──
     GET  /api/stats/pool              流量池状态
 """
@@ -39,9 +43,28 @@ import json
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
+from api.auth_service import (
+    build_login_url,
+    create_session,
+    drop_session,
+    exchange_code,
+    fetch_profile,
+    footprint_summary,
+    resolve_session,
+    sync_footprint,
+    upsert_github_user,
+    user_public,
+)
+from api.crawl_service import (
+    add_keyword,
+    crawl_keywords,
+    list_keywords,
+    remove_keyword,
+)
 from api.feed_service import build_feed, candidate_to_dict
 from api.search_service import hot as search_hot
 from api.search_service import search as search_repos
@@ -89,6 +112,31 @@ class DislikeIn(BaseModel):
     reason: str = "category"
 
 
+class KeywordIn(BaseModel):
+    user_id: int = 1
+    keyword: str
+
+
+class CrawlIn(BaseModel):
+    user_id: int = 1
+    # 空 = 使用用户保存的自定义关键词
+    keywords: list[str] = Field(default_factory=list)
+    # 每个关键词抓几个候选（GitHub search per_page）
+    per_keyword: int = Field(8, ge=1, le=15)
+
+
+class PatIn(BaseModel):
+    """用 GitHub 个人访问令牌直接登录（不想建 OAuth App 时用）。"""
+    token: str
+
+
+def _bearer(request: Request) -> str | None:
+    h = request.headers.get("authorization") or ""
+    if h.lower().startswith("bearer "):
+        return h[7:].strip()
+    return None
+
+
 # ------------------------------------------------------------------ 健康
 
 @router.get("/health")
@@ -103,6 +151,7 @@ def health() -> dict[str, Any]:
 
 @router.get("/feed")
 def get_feed(
+    background_tasks: BackgroundTasks,
     user_id: int = Query(1),
     limit: int = Query(10, ge=1, le=50),
     search: str | None = Query(None, description="搜索词（搜索干预）"),
@@ -120,6 +169,9 @@ def get_feed(
     ⚠️ 带 search 参数时会绕过队列，走实时搜索干预管线 ——
        用户主动搜索是一次性诉求，不该消耗队列。
        （独立的结果页搜索请用 /api/search）
+
+    🇨🇳 中文预翻译：返回后用 BackgroundTasks 后台批量翻译本页描述，
+       用户滑到卡片时译文已落库（前端再调 /api/translate/batch 秒回）。
     """
     langs = [s for s in (session_languages or "").split(",") if s]
     owners = [s for s in (session_owners or "").split(",") if s]
@@ -135,10 +187,21 @@ def get_feed(
                 session_owners=owners,
             )
             items = [candidate_to_dict(c) for c in result["items"]]
-            return {"items": items, "meta": result["meta"]}
+        else:
+            # 常规刷卡 → 缓存池
+            payload = get_queue_feed(conn, user_id, limit=limit)
+            items = payload["items"]
+            result = payload
 
-        # 常规刷卡 → 缓存池
-        return get_queue_feed(conn, user_id, limit=limit)
+        # 后台预热本页描述的中文翻译（不阻塞响应；额度/缓存由服务内部控制）
+        ids = [it["repo_id"] for it in items if it.get("repo_id") is not None]
+        if ids:
+            from api.translate_service import preheat_descriptions
+            background_tasks.add_task(preheat_descriptions, ids)
+
+        if search or langs or owners:
+            return {"items": items, "meta": result["meta"]}
+        return result
 
 
 # ------------------------------------------------------------------ 队列
@@ -566,6 +629,169 @@ def rebuild_user_profile(user_id: int = Query(1)) -> dict[str, Any]:
     }
 
 
+@router.get("/user/keywords")
+def get_custom_keywords(user_id: int = Query(1)) -> dict[str, Any]:
+    """我的自定义兴趣关键词（画像面板管理，可驱动爬虫抓取）。"""
+    with get_conn() as conn:
+        kws = list_keywords(conn, user_id)
+    return {"keywords": kws}
+
+
+@router.post("/user/keywords")
+def post_custom_keyword(payload: KeywordIn) -> dict[str, Any]:
+    """添加一个自定义关键词（自动小写去重，上限 12 个）。"""
+    try:
+        with get_conn() as conn:
+            item = add_keyword(conn, payload.user_id, payload.keyword)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return item
+
+
+@router.delete("/user/keywords/{kid}")
+def delete_custom_keyword(kid: int, user_id: int = Query(1)) -> dict[str, Any]:
+    with get_conn() as conn:
+        ok = remove_keyword(conn, user_id, kid)
+    if not ok:
+        raise HTTPException(status_code=404, detail="关键词不存在")
+    return {"ok": True}
+
+
+@router.post("/queue/crawl")
+def crawl_by_keywords(
+    background_tasks: BackgroundTasks,
+    payload: CrawlIn | None = None,
+) -> dict[str, Any]:
+    """⭐ 用户自定义关键词爬虫：Scrapling 抓 GitHub 真实仓库 → 入库 → 直接入队。
+
+    keywords 为空时使用画像面板里保存的自定义关键词。
+    README/标签由后台任务异步补齐，本接口秒回。
+    """
+    p = payload or CrawlIn()
+    try:
+        with get_conn() as conn:
+            info = crawl_keywords(
+                conn,
+                p.user_id,
+                keywords=p.keywords or None,
+                per_keyword=p.per_keyword,
+                background_enrich=background_tasks,
+            )
+    except ValueError as e:
+        raise HTTPException(status_code=429 if "频繁" in str(e) else 400,
+                            detail=str(e))
+    return info
+
+
+@router.get("/auth/status")
+def auth_status(request: Request) -> dict[str, Any]:
+    """认证能力状态：OAuth 是否已配置 + 回调地址（配置 GitHub App 时要用）。"""
+    from core.config import AUTH_CONFIGURED
+    callback = f"{str(request.base_url).rstrip('/')}/api/auth/github/callback"
+    return {"configured": AUTH_CONFIGURED, "callback_url": callback}
+
+
+@router.get("/auth/github/login")
+def auth_github_login(request: Request) -> Any:
+    """跳转到 GitHub 授权页（注册/登录二合一：GitHub 侧新用户自动带过来）。"""
+    from core.config import AUTH_CONFIGURED
+    if not AUTH_CONFIGURED:
+        raise HTTPException(
+            status_code=400,
+            detail="还没配置 GitHub OAuth。两种方式：① 在 GitHub 建 OAuth App 并把 "
+                   "client_id/secret 填进 backend/core/auth_local.json；"
+                   "② 改用「令牌登录」POST /api/auth/github/pat（无需建 App）。",
+        )
+    callback = f"{str(request.base_url).rstrip('/')}/api/auth/github/callback"
+    return RedirectResponse(build_login_url(callback))
+
+
+@router.get("/auth/github/callback")
+def auth_github_callback(
+    code: str = Query(...),
+    state: str | None = Query(None),
+) -> Any:
+    """GitHub 回调：换 token → 建/取用户 → 发会话 → 跳回前端。"""
+    from core.config import AUTH_FRONTEND_REDIRECT
+
+    def _back(qs: str) -> RedirectResponse:
+        return RedirectResponse(f"{AUTH_FRONTEND_REDIRECT}/?{qs}")
+
+    token = exchange_code(code)
+    if not token:
+        return _back("auth_error=exchange_failed")
+    gh = fetch_profile(token)
+    if not gh:
+        return _back("auth_error=profile_failed")
+    try:
+        with get_conn() as conn:
+            uid = upsert_github_user(conn, gh, token)
+            sess = create_session(conn, uid)
+    except Exception as e:  # noqa: BLE001
+        return _back(f"auth_error={type(e).__name__}")
+    return _back(f"auth_token={sess}&auth_sync=1")
+
+
+@router.post("/auth/github/pat")
+def auth_github_pat(payload: PatIn) -> dict[str, Any]:
+    """用个人访问令牌（PAT）登录 —— 不用建 OAuth App，本地开发最省事。
+
+    PAT 生成：GitHub → Settings → Developer settings → Personal access tokens，
+    勾选 read:user（读公开资料）+ public_repo（读你点星的仓库）。
+    """
+    gh = fetch_profile(payload.token.strip())
+    if not gh:
+        raise HTTPException(status_code=401, detail="令牌无效或没有 read:user 权限")
+    with get_conn() as conn:
+        uid = upsert_github_user(conn, gh, payload.token.strip())
+        sess = create_session(conn, uid)
+        row = conn.execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone()
+        user = user_public(row)
+    return {"token": sess, "user": user}
+
+
+@router.get("/auth/me")
+def auth_me(request: Request) -> dict[str, Any]:
+    """当前登录用户 + GitHub 实证圈概况。"""
+    tok = _bearer(request)
+    with get_conn() as conn:
+        row = resolve_session(conn, tok)
+        if not row:
+            raise HTTPException(status_code=401, detail="未登录或会话已过期")
+        out = user_public(row)
+        out["footprint"] = footprint_summary(conn, int(row["id"]))
+    return out
+
+
+@router.post("/auth/sync")
+def auth_sync(request: Request) -> dict[str, Any]:
+    """⭐ 拉取用户自建仓库 + 点星仓库（权重按规则计算）→ 重建画像。
+
+    这一步是"用户实操证据 → 强推荐信号"的入口：
+      自建仓库（本周更新 0.5 ~ 陈旧 0.03）> 点星仓库（第 1 名 0.4 ~ 长尾 0.05）
+    """
+    tok = _bearer(request)
+    with get_conn() as conn:
+        row = resolve_session(conn, tok)
+        if not row:
+            raise HTTPException(status_code=401, detail="未登录或会话已过期")
+        gh_token = row["github_token"]
+        if not gh_token:
+            raise HTTPException(status_code=400, detail="该账号没有 GitHub 令牌，请重新登录")
+        info = sync_footprint(conn, int(row["id"]), gh_token)
+        info["footprint"] = footprint_summary(conn, int(row["id"]))
+    return info
+
+
+@router.post("/auth/logout")
+def auth_logout(request: Request) -> dict[str, Any]:
+    tok = _bearer(request)
+    if tok:
+        with get_conn() as conn:
+            drop_session(conn, tok)
+    return {"ok": True}
+
+
 @router.get("/user/events")
 def user_events(
     user_id: int = Query(1),
@@ -594,6 +820,46 @@ def user_events(
     return {
         "items": [dict(r) for r in rows],
         "by_type": {r["event_type"]: r["n"] for r in summary},
+    }
+
+
+# ------------------------------------------------------------------ 翻译
+
+@router.post("/repos/{repo_id}/translate")
+def translate_repo_api(repo_id: int) -> dict[str, Any]:
+    """把仓库的 description / README 翻译成中文。
+
+    防护：本地限流（12 次/分钟、45 次/天）+ 429 冷却 + SQLite 缓存 +
+    并发合并 + 三模型级联降级。详见 api/translate_service.py。
+    """
+    from api.translate_service import translate_repo
+    with get_conn() as conn:
+        return translate_repo(conn, repo_id)
+
+
+@router.get("/translate/status")
+def translate_status() -> dict[str, Any]:
+    """翻译服务额度与冷却状态（调试 / 前端提示）。"""
+    from api.translate_service import rate_status
+    return rate_status()
+
+
+class BatchTranslateIn(BaseModel):
+    repo_ids: list[int] = Field(default_factory=list, description="本页 feed 的仓库 id 列表")
+
+
+@router.post("/translate/batch")
+def translate_batch(payload: BatchTranslateIn) -> dict[str, Any]:
+    """批量拉取 feed 卡片描述的中文译文。
+
+    缓存命中秒回；未命中的整批合并成 1 次 LLM 调用（只计 1 次额度）。
+    限流时不抛错，缺失条目为 null，前端回退显示英文原文。
+    """
+    from api.translate_service import translate_descriptions
+    with get_conn() as conn:
+        m = translate_descriptions(conn, payload.repo_ids)
+    return {
+        "translations": {str(k): v for k, v in m.items()},
     }
 
 

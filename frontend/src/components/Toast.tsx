@@ -17,10 +17,12 @@ export function toast(text: string, tone: ToastMsg['tone'] = 'info'): void {
   listeners.forEach((fn) => fn(msg))
 }
 
+/* 浅色界面上的 toast 用墨色胶囊（macOS 通知语法）：
+   深底浮在白瓷上对比最清楚，语义色只走文字。 */
 const TONES: Record<NonNullable<ToastMsg['tone']>, string> = {
-  info: 'border-white/12 text-white/80',
-  ok: 'border-risk-safe/35 text-risk-safe',
-  warn: 'border-risk-caution/40 text-risk-caution',
+  info: 'border-white/15 text-white/90',
+  ok: 'border-emerald-300/40 text-emerald-200',
+  warn: 'border-amber-300/50 text-amber-200',
 }
 
 const ToastHost: FC = () => {
@@ -44,7 +46,7 @@ const ToastHost: FC = () => {
       {list.map((m) => (
         <div
           key={m.id}
-          className={`glass rounded-full px-4 py-2 text-[12.5px] animate-slide-up border ${
+          className={`bg-ink/90 backdrop-blur-glass rounded-full px-4 py-2 text-[12.5px] animate-slide-up border ${
             TONES[m.tone ?? 'info']
           }`}
         >

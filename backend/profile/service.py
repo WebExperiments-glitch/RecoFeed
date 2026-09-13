@@ -191,13 +191,31 @@ def build_profile(conn: sqlite3.Connection, user_id: int) -> TagVector:
     starred = load_starred_repos(conn, user_id)
     read = load_read_repos(conn, user_id)
 
+    # ── GitHub 实证圈：用户自建仓库 / 点星仓库（最强信号）──
+    # 权重由 api/auth_service 按真实数据算好（自建看推送时间、点星看仓库星数排名），
+    # 这里直接用；topics 是该仓库的 GitHub 官方话题，作为标签来源。
+    from api.auth_service import load_footprint
+    fp_rows = load_footprint(conn, user_id)
+
+    def _fp_tags(raw: str | None) -> dict[str, float]:
+        try:
+            arr = json.loads(raw or "[]")
+        except (json.JSONDecodeError, TypeError):
+            return {}
+        if not isinstance(arr, list):
+            return {}
+        return {str(t).strip().lower(): 1.0 for t in arr if str(t).strip()}
+
     # ── 先统计每个标签被多少个不同仓库"拥有"（文档频率）──
     doc_freq: dict[str, int] = {}
     all_rows = list(owned) + list(starred) + list(read)
     for row in all_rows:
         for tag in _parse_tags(row["tags_json"]):
             doc_freq[tag] = doc_freq.get(tag, 0) + 1
-    n_docs = max(1, len(all_rows))
+    for row in fp_rows:
+        for tag in _fp_tags(row["topics_json"]):
+            doc_freq[tag] = doc_freq.get(tag, 0) + 1
+    n_docs = max(1, len(all_rows) + len(fp_rows))
 
     def idf(tag: str) -> float:
         """标签的稀有度权重。
@@ -218,6 +236,18 @@ def build_profile(conn: sqlite3.Connection, user_id: int) -> TagVector:
         return min(1.0, math.log(1 + df) / math.log(1 + 5))
 
     tv = TagVector()
+
+    # ── 实证圈（最强）：GitHub 自建仓库 / 点星仓库 ──
+    # ⚠️ 这里是"用户亲手做过的东西"，比刷到停一会儿（dwell）可信得多，
+    #    所以权重最高并且乘 GITHUB_SIGNAL_BOOST 放大 —— 用户要求"非常猛地推"。
+    from core.config import GITHUB_SIGNAL_BOOST
+    for row in fp_rows:
+        tags = _fp_tags(row["topics_json"])
+        if not tags:
+            continue
+        tags = {t: v * idf(t) for t, v in tags.items()}
+        src = "github_owned" if row["source"] == "owned" else "github_starred"
+        tv.add(tags, float(row["weight"]) * GITHUB_SIGNAL_BOOST, src)
 
     # ── 能力圈：自建仓库 ×1.0（含降噪）──
     for row in owned:

@@ -1,34 +1,41 @@
 import type { FC } from 'react'
+import type { SessionUser } from '@/types/api'
 
 interface Props {
   queueSize: number
   source: string
+  user: SessionUser | null
   onOpenSearch: () => void
   onOpenProfile: () => void
 }
 
 /**
- * 顶部状态栏（毛玻璃悬浮）。
+ * 顶部状态栏（磨砂羊皮纸导航，sub-nav-frosted 变体）。
+ *
+ * Apple 语法：悬浮感来自 backdrop blur + parchment 80%，
+ * 不来自阴影；标题用负字距的「Apple tight」排版。
  *
  * 显示队列水位 —— 这是本项目的一个「透明度」设计：
  *   用户能看到还有多少条待刷、是否在补货，
  *   而不是黑盒地"刷着刷着就没了"。
  */
-const TopBar: FC<Props> = ({ queueSize, source, onOpenSearch, onOpenProfile }) => {
+const TopBar: FC<Props> = ({ queueSize, source, user, onOpenSearch, onOpenProfile }) => {
   const isRealtime = source.includes('realtime')
   return (
     <header className="absolute top-0 inset-x-0 z-30 safe-t">
-      <div className="flex items-center gap-2 px-4 py-3">
+      <div className="glass flex items-center gap-2 px-4 h-[52px]">
         <div className="flex items-baseline gap-1.5 select-none">
-          <span className="text-[17px] font-bold text-gradient">RecoFeed</span>
-          <span className="text-[10px] text-white/35">遗珠推荐</span>
+          <span className="text-[21px] font-semibold text-ink leading-none tracking-[-0.23px]">
+            RecoFeed
+          </span>
+          <span className="text-[10px] text-ink-faint">遗珠推荐</span>
         </div>
 
         <div className="flex-1" />
 
-        {/* 队列水位 */}
+        {/* 队列水位 —— 珍珠胶囊（button-pearl-capsule 语法） */}
         <div
-          className="glass-soft chip gap-1.5 text-white/55"
+          className="chip bg-pearl border border-hairline text-ink-muted gap-1.5 h-7"
           title={isRealtime ? '缓存池见底，正在实时兜底推荐' : '待刷缓存池水位'}
         >
           <span
@@ -40,8 +47,9 @@ const TopBar: FC<Props> = ({ queueSize, source, onOpenSearch, onOpenProfile }) =
         </div>
 
         <button
-          className="glass-soft h-9 w-9 rounded-full flex items-center justify-center
-                     text-white/70 hover:text-white transition-colors"
+          className="h-9 w-9 rounded-full flex items-center justify-center
+                     bg-pearl border border-hairline text-ink-soft
+                     hover:text-ink hover:bg-parchment transition-colors active:scale-95"
           onClick={onOpenSearch}
           aria-label="搜索"
         >
@@ -49,12 +57,23 @@ const TopBar: FC<Props> = ({ queueSize, source, onOpenSearch, onOpenProfile }) =
         </button>
 
         <button
-          className="glass-soft h-9 w-9 rounded-full flex items-center justify-center
-                     text-white/70 hover:text-white transition-colors"
+          className="h-9 w-9 rounded-full flex items-center justify-center overflow-hidden
+                     bg-pearl border border-hairline text-ink-soft
+                     hover:text-ink hover:bg-parchment transition-colors active:scale-95"
           onClick={onOpenProfile}
           aria-label="我的画像"
+          title={user?.github_login ? `@${user.github_login}` : '我的画像'}
         >
-          <UserIcon />
+          {user?.avatar_url ? (
+            <img
+              src={user.avatar_url}
+              alt={user.github_login ?? 'avatar'}
+              className="h-full w-full object-cover"
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <UserIcon />
+          )}
         </button>
       </div>
     </header>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { FC } from 'react'
-import type { RepoDetail } from '@/types/api'
-import { getRepo, starRepo } from '@/lib/api'
+import type { RepoDetail, TranslateResponse } from '@/types/api'
+import { getRepo, starRepo, translateRepo } from '@/lib/api'
 import {
   formatStars,
   isForgotten,
@@ -21,7 +21,7 @@ interface Props {
 }
 
 /**
- * 仓库详情抽屉（底部上滑）。
+ * 仓库详情抽屉（底部上滑）—— 白色瓷面 + 发丝线分区。
  *
  * 展示的是「后端已经算好的数据」—— 包括流量池等级、各项转化率。
  * 这是本项目的透明度设计：让用户看到这个仓库在推荐系统里的处境。
@@ -32,9 +32,19 @@ const DetailSheet: FC<Props> = ({ repoId, userId, onClose }) => {
   const [err, setErr] = useState<string | null>(null)
   const [starred, setStarred] = useState(false)
 
+  // ---- 翻译状态（打开详情后自动请求，缓存命中瞬时返回）
+  const [tr, setTr] = useState<TranslateResponse | null>(null)
+  const [trLoading, setTrLoading] = useState(false)
+  const [trErr, setTrErr] = useState<string | null>(null)
+  const [showOriginal, setShowOriginal] = useState(false)
+
   useEffect(() => {
     if (repoId === null) {
       setData(null)
+      setTr(null)
+      setTrErr(null)
+      setTrLoading(false)
+      setShowOriginal(false)
       return
     }
     let alive = true
@@ -53,6 +63,26 @@ const DetailSheet: FC<Props> = ({ repoId, userId, onClose }) => {
       .finally(() => {
         if (alive) setLoading(false)
       })
+
+    // 自动翻译（后台进行，原文照常显示；失败静默降级为小字提示）
+    setTr(null)
+    setTrErr(null)
+    setTrLoading(true)
+    setShowOriginal(false)
+    translateRepo(repoId)
+      .then((t) => {
+        if (!alive) return
+        setTr(t)
+      })
+      .catch((e: unknown) => {
+        if (!alive) return
+        const msg = e instanceof Error ? e.message : '翻译失败'
+        setTrErr(msg)
+      })
+      .finally(() => {
+        if (alive) setTrLoading(false)
+      })
+
     return () => {
       alive = false
     }
@@ -79,15 +109,15 @@ const DetailSheet: FC<Props> = ({ repoId, userId, onClose }) => {
     <div className="absolute inset-0 z-40 flex flex-col justify-end">
       {/* 遮罩 */}
       <button
-        className="absolute inset-0 bg-black/65 backdrop-blur-[2px]"
+        className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"
         onClick={onClose}
         aria-label="关闭"
       />
 
-      <div className="relative glass rounded-t-3xl max-h-[88%] flex flex-col animate-slide-up">
+      <div className="relative bg-canvas border-t border-hairline rounded-t-card max-h-[88%] flex flex-col animate-slide-up">
         {/* 把手 */}
         <div className="shrink-0 pt-2.5 pb-1 flex justify-center">
-          <div className="h-1 w-10 rounded-full bg-white/20" />
+          <div className="h-1 w-10 rounded-full bg-divider" />
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-6 safe-b">
@@ -100,7 +130,7 @@ const DetailSheet: FC<Props> = ({ repoId, userId, onClose }) => {
           )}
 
           {err && (
-            <div className="py-10 text-center text-[13px] text-risk-danger/80">
+            <div className="py-10 text-center text-[13px] text-risk-danger">
               {err}
             </div>
           )}
@@ -110,27 +140,40 @@ const DetailSheet: FC<Props> = ({ repoId, userId, onClose }) => {
               {/* 标题 */}
               <div className="flex items-start gap-3">
                 <div className="min-w-0 flex-1">
-                  <h2 className="text-[19px] font-bold text-white leading-tight break-all">
+                  <h2 className="text-[19px] font-semibold text-ink tracking-[-0.24px] leading-tight break-all">
                     {data.name}
                   </h2>
-                  <p className="text-[12.5px] text-white/45 mt-1">
+                  <p className="text-[12.5px] text-ink-muted mt-1">
                     {data.owner}
                   </p>
                 </div>
                 {isForgotten(data.forgotten_score) && (
-                  <span className="chip border border-gem/45 bg-gem/15 text-gem shrink-0">
+                  <span className="chip border border-gem/25 bg-gem/[0.08] text-gem shrink-0">
                     💎 遗珠
                   </span>
                 )}
               </div>
 
               {data.description && (
-                <p className="text-[13.5px] text-white/72 mt-3 leading-relaxed">
-                  {data.description}
-                </p>
+                <div className="mt-3">
+                  {tr?.zh_description && !showOriginal ? (
+                    <>
+                      <p className="text-[13.5px] text-ink leading-[1.47]">
+                        {tr.zh_description}
+                      </p>
+                      <p className="text-[12px] text-ink-faint mt-1.5 leading-relaxed">
+                        {data.description}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-[13.5px] text-ink-soft leading-[1.47]">
+                      {data.description}
+                    </p>
+                  )}
+                </div>
               )}
 
-              {/* 操作按钮 */}
+              {/* 操作按钮：蓝胶囊主 CTA + 次动作 */}
               <div className="flex gap-2 mt-4">
                 <a
                   className="btn-primary flex-1"
@@ -174,12 +217,12 @@ const DetailSheet: FC<Props> = ({ repoId, userId, onClose }) => {
                     <span className={`chip border ${lic.cls}`}>{lic.text}</span>
                   )}
                   {!!data.has_ci && (
-                    <span className="chip bg-accent/10 text-accent-glow/85 border border-accent/20">
+                    <span className="chip bg-accent/[0.08] text-accent border border-accent/20">
                       CI
                     </span>
                   )}
                   {!!data.has_tests && (
-                    <span className="chip bg-risk-safe/10 text-risk-safe border border-risk-safe/25">
+                    <span className="chip bg-risk-safe/[0.08] text-risk-safe border border-risk-safe/25">
                       测试
                     </span>
                   )}
@@ -200,19 +243,57 @@ const DetailSheet: FC<Props> = ({ repoId, userId, onClose }) => {
                   <Stat label="点击率" value={`${pct(data.ctr)}%`} />
                 </div>
                 {(data.impressions ?? 0) < 20 && (
-                  <p className="text-[11.5px] text-white/35 mt-2.5 leading-relaxed">
+                  <p className="text-[11.5px] text-ink-faint mt-2.5 leading-relaxed">
                     曝光较少，推荐系统正在给它更多机会。
                   </p>
                 )}
               </Section>
 
-              {/* README */}
+              {/* README（自动翻译，可切换原文） */}
               {readme && (
-                <Section title="README 摘要">
-                  <pre className="text-[12.5px] leading-relaxed text-white/60 whitespace-pre-wrap font-sans">
-                    {readme.slice(0, 1600)}
-                    {readme.length > 1600 ? '\n\n…' : ''}
+                <Section
+                  title={
+                    tr?.zh_readme && !showOriginal
+                      ? 'README 摘要（中文）'
+                      : 'README 摘要'
+                  }
+                  action={
+                    tr?.zh_readme ? (
+                      <button
+                        className="text-[11px] text-accent border border-accent/25 bg-accent/[0.08] rounded-full px-2.5 py-0.5 active:opacity-60"
+                        onClick={() => setShowOriginal((v) => !v)}
+                      >
+                        {showOriginal ? '看中文' : '看原文'}
+                      </button>
+                    ) : trLoading ? (
+                      <span className="text-[11px] text-ink-faint">
+                        翻译中…
+                      </span>
+                    ) : undefined
+                  }
+                >
+                  <pre className="text-[12.5px] leading-relaxed text-ink-soft whitespace-pre-wrap font-sans">
+                    {(tr?.zh_readme && !showOriginal
+                      ? tr.zh_readme
+                      : readme
+                    ).slice(0, 1600)}
+                    {((tr?.zh_readme && !showOriginal
+                      ? tr.zh_readme
+                      : readme
+                    ).length ?? 0) > 1600
+                      ? '\n\n…'
+                      : ''}
                   </pre>
+                  {tr?.readme_truncated && !showOriginal && (
+                    <p className="text-[11px] text-ink-faint mt-2">
+                      （篇幅所限，仅翻译开头部分；完整内容请看 GitHub）
+                    </p>
+                  )}
+                  {trErr && !tr && (
+                    <p className="text-[11px] text-ink-faint mt-2">
+                      中文翻译暂不可用：{trErr}
+                    </p>
+                  )}
                 </Section>
               )}
 
@@ -230,10 +311,10 @@ const DetailSheet: FC<Props> = ({ repoId, userId, onClose }) => {
                       .map(([tagName, w]) => (
                         <span
                           key={tagName}
-                          className="chip bg-white/[0.05] text-white/55 border border-white/[0.08]"
+                          className="chip bg-pearl text-ink-soft border border-hairline"
                         >
                           {tagName}
-                          <span className="text-white/25 ml-1.5">
+                          <span className="text-ink-faint ml-1.5">
                             {w.toFixed(2)}
                           </span>
                         </span>
@@ -249,14 +330,18 @@ const DetailSheet: FC<Props> = ({ repoId, userId, onClose }) => {
   )
 }
 
-const Section: FC<{ title: string; children: React.ReactNode }> = ({
-  title,
-  children,
-}) => (
+const Section: FC<{
+  title: string
+  children: React.ReactNode
+  action?: React.ReactNode
+}> = ({ title, children, action }) => (
   <div className="mt-5">
-    <h3 className="text-[12px] font-semibold text-white/40 mb-2.5 tracking-wide">
-      {title}
-    </h3>
+    <div className="flex items-center justify-between mb-2.5">
+      <h3 className="text-[12px] font-semibold text-ink-muted tracking-wide">
+        {title}
+      </h3>
+      {action}
+    </div>
     {children}
   </div>
 )
@@ -266,7 +351,7 @@ const Stat: FC<{ label: string; value: string; dot?: string }> = ({
   value,
   dot,
 }) => (
-  <div className="glass-soft rounded-xl px-2.5 py-2">
+  <div className="bg-canvas border border-hairline rounded-pearl px-2.5 py-2">
     <div className="flex items-center gap-1.5">
       {dot && (
         <span
@@ -274,11 +359,11 @@ const Stat: FC<{ label: string; value: string; dot?: string }> = ({
           style={{ background: dot }}
         />
       )}
-      <span className="text-[13px] font-semibold text-white/88 leading-none truncate">
+      <span className="text-[13px] font-semibold text-ink leading-none truncate">
         {value}
       </span>
     </div>
-    <div className="text-[10px] text-white/35 mt-1.5 leading-none">
+    <div className="text-[10px] text-ink-muted mt-1.5 leading-none">
       {label}
     </div>
   </div>
@@ -292,16 +377,16 @@ const RateBar: FC<{ label: string; v: number; gold?: boolean }> = ({
   const p = pct(v)
   return (
     <div className="flex items-center gap-3">
-      <span className="text-[11.5px] text-white/45 w-14 shrink-0">
+      <span className="text-[11.5px] text-ink-muted w-14 shrink-0">
         {label}
       </span>
-      <div className="flex-1 h-1.5 rounded-full bg-white/[0.07] overflow-hidden">
+      <div className="flex-1 h-1.5 rounded-full bg-divider overflow-hidden">
         <div
           className={`h-full rounded-full ${gold ? 'bg-gem' : 'bg-accent'}`}
           style={{ width: `${p}%` }}
         />
       </div>
-      <span className="text-[11px] text-white/40 w-8 text-right shrink-0">
+      <span className="text-[11px] text-ink-muted w-8 text-right shrink-0">
         {p}
       </span>
     </div>

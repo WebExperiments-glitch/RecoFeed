@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FC } from 'react'
-import type { FeedItem, FeedMeta } from '@/types/api'
+import type { CardTranslation, FeedItem, FeedMeta } from '@/types/api'
 import FeedCard from '@/components/FeedCard'
 import CardSkeleton from '@/components/CardSkeleton'
 import { trackImpression } from '@/lib/events'
+import { translateBatch } from '@/lib/api'
 
 interface Props {
   items: FeedItem[]
@@ -39,6 +40,68 @@ const FeedList: FC<Props> = ({
   const [activeIndex, setActiveIndex] = useState(0)
   const impressedRef = useRef<Set<number>>(new Set())
   const endedRef = useRef(false)
+
+  // ── 卡片中文翻译（repo_id → {zh_name, zh_description}）──
+  // feed 到手后批量拉取：整页合并 1 次 LLM 调用；
+  // 后端在 feed 返回时已在后台预热，这里大概率命中缓存秒回。
+  //
+  // ⚠️ 重试机制（踩坑）：批量翻译偶发失败（限流/模型抽风/质量门禁丢弃
+  //    脏输出）时，后端返回里对应的 id 是 null 或整个请求报错。
+  //    之前失败就静默放弃，卡片会一直停在英文 —— 用户看到的就是这种卡。
+  //    现在缺失/失败都走 8~10s 退避重试，最多 3 次；彻底失败才放行
+  //    requestedRef，等下次 items 变化再补。
+  const [zhMap, setZhMap] = useState<Record<number, CardTranslation>>({})
+  const requestedRef = useRef<Set<number>>(new Set())
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
+  const runZh = useCallback((ids: number[], attempt: number): void => {
+    translateBatch(ids)
+      .then((res) => {
+        if (!mountedRef.current) return
+        const patch: Record<number, CardTranslation> = {}
+        const missing: number[] = []
+        for (const id of ids) {
+          const v = res.translations[String(id)]
+          if (v) patch[id] = v
+          else missing.push(id)
+        }
+        if (Object.keys(patch).length > 0) {
+          setZhMap((prev) => ({ ...prev, ...patch }))
+        }
+        if (missing.length > 0) {
+          if (attempt < 3) {
+            // 缓存未热 / 门禁丢弃：等后端重试窗口过一会儿再拉
+            window.setTimeout(() => runZh(missing, attempt + 1), 8000)
+          } else {
+            missing.forEach((id) => requestedRef.current.delete(id))
+          }
+        }
+      })
+      .catch(() => {
+        if (!mountedRef.current) return
+        if (attempt < 3) {
+          // 限流 / 网络失败：稍长退避
+          window.setTimeout(() => runZh(ids, attempt + 1), 10000)
+        } else {
+          ids.forEach((id) => requestedRef.current.delete(id))
+        }
+      })
+  }, [])
+
+  useEffect(() => {
+    const need = items
+      .map((it) => it.repo_id)
+      .filter((id) => !requestedRef.current.has(id))
+    if (need.length === 0) return
+    need.forEach((id) => requestedRef.current.add(id))
+    runZh(need, 1)
+  }, [items, runZh])
 
   const registerEl = useCallback((index: number, el: HTMLDivElement | null) => {
     if (el) cardEls.current.set(index, el)
@@ -137,6 +200,7 @@ const FeedList: FC<Props> = ({
           batchId={meta?.refill?.batch_id}
           userId={userId}
           isActive={i === activeIndex}
+          zh={zhMap[item.repo_id]}
           onOpenDetail={onOpenDetail}
           onDislike={onDislike}
           onRegisterEl={registerEl}
@@ -146,15 +210,15 @@ const FeedList: FC<Props> = ({
       {/* 列表末尾的加载指示 */}
       <div className="snap-card h-[72px] w-full flex items-center justify-center">
         {loading ? (
-          <span className="text-[12px] text-white/35 animate-pulse">
+          <span className="text-[12px] text-ink-faint animate-pulse">
             正在补充推荐…
           </span>
         ) : meta?.needs_refill ? (
-          <span className="text-[12px] text-white/30">
+          <span className="text-[12px] text-ink-faint">
             队列见底，正在按你的兴趣补货
           </span>
         ) : (
-          <span className="text-[12px] text-white/20">已经到底了</span>
+          <span className="text-[12px] text-ink-faint/70">已经到底了</span>
         )}
       </div>
     </div>

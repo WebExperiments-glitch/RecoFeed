@@ -1,0 +1,2271 @@
+{
+  "config": {
+    "rounds": 20,
+    "page": 10,
+    "user_id": 2,
+    "interest": {
+      "voice": 1.0,
+      "tts": 1.0,
+      "rvc": 0.95,
+      "audio": 0.85,
+      "llm": 0.9,
+      "inference": 0.9,
+      "quantization": 0.8,
+      "gguf": 0.8,
+      "training": 0.7,
+      "finetune": 0.7,
+      "python": 0.6,
+      "agent": 0.55,
+      "embedding": 0.5,
+      "frontend": 0.35,
+      "react": 0.35,
+      "rust": 0.3,
+      "database": 0.25,
+      "video": 0.15,
+      "education": 0.1,
+      "cloud": 0.1
+    },
+    "curiosity": 0.08
+  },
+  "per_round": [
+    {
+      "round": 1,
+      "feed_match": 0.159,
+      "hit_rate": 0.2,
+      "profile_align": 0.514,
+      "likes": 4,
+      "stars": 1,
+      "dislikes": 1,
+      "deep": 3
+    },
+    {
+      "round": 2,
+      "feed_match": 0.13,
+      "hit_rate": 0.2,
+      "profile_align": 0.492,
+      "likes": 3,
+      "stars": 1,
+      "dislikes": 1,
+      "deep": 3
+    },
+    {
+      "round": 3,
+      "feed_match": 0.02,
+      "hit_rate": 0.0,
+      "profile_align": 0.492,
+      "likes": 3,
+      "stars": 1,
+      "dislikes": 6,
+      "deep": 0
+    },
+    {
+      "round": 4,
+      "feed_match": 0.032,
+      "hit_rate": 0.0,
+      "profile_align": 0.544,
+      "likes": 1,
+      "stars": 0,
+      "dislikes": 2,
+      "deep": 2
+    },
+    {
+      "round": 5,
+      "feed_match": 0.17,
+      "hit_rate": 0.3,
+      "profile_align": 0.611,
+      "likes": 5,
+      "stars": 2,
+      "dislikes": 2,
+      "deep": 2
+    },
+    {
+      "round": 6,
+      "feed_match": 0.156,
+      "hit_rate": 0.3,
+      "profile_align": 0.543,
+      "likes": 3,
+      "stars": 2,
+      "dislikes": 2,
+      "deep": 3
+    },
+    {
+      "round": 7,
+      "feed_match": 0.201,
+      "hit_rate": 0.2,
+      "profile_align": 0.598,
+      "likes": 6,
+      "stars": 1,
+      "dislikes": 0,
+      "deep": 4
+    },
+    {
+      "round": 8,
+      "feed_match": 0.173,
+      "hit_rate": 0.1,
+      "profile_align": 0.61,
+      "likes": 5,
+      "stars": 1,
+      "dislikes": 1,
+      "deep": 6
+    },
+    {
+      "round": 9,
+      "feed_match": 0.233,
+      "hit_rate": 0.5,
+      "profile_align": 0.658,
+      "likes": 2,
+      "stars": 1,
+      "dislikes": 1,
+      "deep": 7
+    },
+    {
+      "round": 10,
+      "feed_match": 0.189,
+      "hit_rate": 0.4,
+      "profile_align": 0.658,
+      "likes": 2,
+      "stars": 1,
+      "dislikes": 1,
+      "deep": 6
+    },
+    {
+      "round": 11,
+      "feed_match": 0.347,
+      "hit_rate": 0.7,
+      "profile_align": 0.673,
+      "likes": 4,
+      "stars": 1,
+      "dislikes": 1,
+      "deep": 9
+    },
+    {
+      "round": 12,
+      "feed_match": 0.332,
+      "hit_rate": 0.7,
+      "profile_align": 0.697,
+      "likes": 6,
+      "stars": 2,
+      "dislikes": 0,
+      "deep": 8
+    },
+    {
+      "round": 13,
+      "feed_match": 0.225,
+      "hit_rate": 0.5,
+      "profile_align": 0.69,
+      "likes": 3,
+      "stars": 1,
+      "dislikes": 2,
+      "deep": 7
+    },
+    {
+      "round": 14,
+      "feed_match": 0.239,
+      "hit_rate": 0.5,
+      "profile_align": 0.698,
+      "likes": 4,
+      "stars": 3,
+      "dislikes": 2,
+      "deep": 7
+    },
+    {
+      "round": 15,
+      "feed_match": 0.123,
+      "hit_rate": 0.1,
+      "profile_align": 0.693,
+      "likes": 2,
+      "stars": 0,
+      "dislikes": 1,
+      "deep": 4
+    },
+    {
+      "round": 16,
+      "feed_match": 0.229,
+      "hit_rate": 0.4,
+      "profile_align": 0.675,
+      "likes": 2,
+      "stars": 1,
+      "dislikes": 0,
+      "deep": 8
+    },
+    {
+      "round": 17,
+      "feed_match": 0.141,
+      "hit_rate": 0.3,
+      "profile_align": 0.669,
+      "likes": 3,
+      "stars": 0,
+      "dislikes": 2,
+      "deep": 3
+    },
+    {
+      "round": 18,
+      "feed_match": 0.093,
+      "hit_rate": 0.2,
+      "profile_align": 0.666,
+      "likes": 3,
+      "stars": 1,
+      "dislikes": 0,
+      "deep": 5
+    },
+    {
+      "round": 19,
+      "feed_match": 0.098,
+      "hit_rate": 0.1,
+      "profile_align": 0.659,
+      "likes": 6,
+      "stars": 2,
+      "dislikes": 3,
+      "deep": 2
+    },
+    {
+      "round": 20,
+      "feed_match": 0.106,
+      "hit_rate": 0.1,
+      "profile_align": 0.658,
+      "likes": 3,
+      "stars": 1,
+      "dislikes": 3,
+      "deep": 4
+    }
+  ],
+  "cards": [
+    {
+      "round": 1,
+      "full_name": "openclaw/openclaw",
+      "match": 0.101,
+      "like": true,
+      "deep": false,
+      "dwell": 1207,
+      "stars": 389473,
+      "curious": false
+    },
+    {
+      "round": 1,
+      "full_name": "espnet/espnet",
+      "match": 0.336,
+      "like": true,
+      "deep": true,
+      "dwell": 3098,
+      "stars": 9955,
+      "curious": false
+    },
+    {
+      "round": 1,
+      "full_name": "oven-sh/bun",
+      "match": 0.118,
+      "like": true,
+      "deep": false,
+      "dwell": 2622,
+      "stars": 95946,
+      "curious": false
+    },
+    {
+      "round": 1,
+      "full_name": "mudler/LocalAI",
+      "match": 0.521,
+      "like": true,
+      "deep": true,
+      "dwell": 8583,
+      "stars": 49062,
+      "curious": true
+    },
+    {
+      "round": 1,
+      "full_name": "ruvnet/RuView",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 573,
+      "stars": 93069,
+      "curious": false
+    },
+    {
+      "round": 1,
+      "full_name": "prisma/orm",
+      "match": 0.144,
+      "like": false,
+      "deep": false,
+      "dwell": 2714,
+      "stars": 47601,
+      "curious": false
+    },
+    {
+      "round": 1,
+      "full_name": "awslabs/agent-plugins",
+      "match": 0.185,
+      "like": false,
+      "deep": true,
+      "dwell": 3450,
+      "stars": 894,
+      "curious": false
+    },
+    {
+      "round": 1,
+      "full_name": "freeCodeCamp/freeCodeCamp",
+      "match": 0.034,
+      "like": false,
+      "deep": false,
+      "dwell": 770,
+      "stars": 455331,
+      "curious": false
+    },
+    {
+      "round": 1,
+      "full_name": "nilbuild/developer-roadmap",
+      "match": 0.118,
+      "like": false,
+      "deep": false,
+      "dwell": 1849,
+      "stars": 366937,
+      "curious": false
+    },
+    {
+      "round": 1,
+      "full_name": "awesome-selfhosted/awesome-selfhosted",
+      "match": 0.034,
+      "like": false,
+      "deep": false,
+      "dwell": 1029,
+      "stars": 318628,
+      "curious": false
+    },
+    {
+      "round": 2,
+      "full_name": "public-apis/public-apis",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 1085,
+      "stars": 479094,
+      "curious": false
+    },
+    {
+      "round": 2,
+      "full_name": "EbookFoundation/free-programming-books",
+      "match": 0.034,
+      "like": false,
+      "deep": false,
+      "dwell": 1370,
+      "stars": 396562,
+      "curious": false
+    },
+    {
+      "round": 2,
+      "full_name": "avelino/awesome-go",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 521,
+      "stars": 183864,
+      "curious": false
+    },
+    {
+      "round": 2,
+      "full_name": "sickn33/agentic-awesome-skills",
+      "match": 0.185,
+      "like": false,
+      "deep": false,
+      "dwell": 2597,
+      "stars": 46295,
+      "curious": false
+    },
+    {
+      "round": 2,
+      "full_name": "f/prompts.chat",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 866,
+      "stars": 170015,
+      "curious": false
+    },
+    {
+      "round": 2,
+      "full_name": "rafska/awesome-local-llm",
+      "match": 0.302,
+      "like": true,
+      "deep": true,
+      "dwell": 4873,
+      "stars": 2843,
+      "curious": false
+    },
+    {
+      "round": 2,
+      "full_name": "Camb-ai/MARS5-TTS",
+      "match": 0.461,
+      "like": false,
+      "deep": true,
+      "dwell": 3810,
+      "stars": 2818,
+      "curious": false
+    },
+    {
+      "round": 2,
+      "full_name": "GriddleGriddle/Griddle",
+      "match": 0.118,
+      "like": false,
+      "deep": false,
+      "dwell": 2149,
+      "stars": 2487,
+      "curious": false
+    },
+    {
+      "round": 2,
+      "full_name": "EntilZha/PyFunctional",
+      "match": 0.202,
+      "like": true,
+      "deep": true,
+      "dwell": 4726,
+      "stars": 2487,
+      "curious": false
+    },
+    {
+      "round": 2,
+      "full_name": "jiqizhixin/ML-Tutorial-Experiment",
+      "match": 0.0,
+      "like": true,
+      "deep": false,
+      "dwell": 711,
+      "stars": 2487,
+      "curious": false
+    },
+    {
+      "round": 3,
+      "full_name": "johnpolacek/scrollorama",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 1204,
+      "stars": 2488,
+      "curious": false
+    },
+    {
+      "round": 3,
+      "full_name": "jquery-boilerplate/jquery-boilerplate",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 736,
+      "stars": 2488,
+      "curious": false
+    },
+    {
+      "round": 3,
+      "full_name": "alibaba/tsar",
+      "match": 0.0,
+      "like": true,
+      "deep": false,
+      "dwell": 1125,
+      "stars": 2487,
+      "curious": false
+    },
+    {
+      "round": 3,
+      "full_name": "jasonjmcghee/rem",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 1206,
+      "stars": 2488,
+      "curious": false
+    },
+    {
+      "round": 3,
+      "full_name": "ipazc/mtcnn",
+      "match": 0.202,
+      "like": true,
+      "deep": false,
+      "dwell": 2081,
+      "stars": 2488,
+      "curious": false
+    },
+    {
+      "round": 3,
+      "full_name": "nil0x42/phpsploit",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 879,
+      "stars": 2491,
+      "curious": false
+    },
+    {
+      "round": 3,
+      "full_name": "ppogg/YOLOv5-Lite",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 666,
+      "stars": 2490,
+      "curious": false
+    },
+    {
+      "round": 3,
+      "full_name": "mahavivo/english-wordlists",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 1021,
+      "stars": 2488,
+      "curious": false
+    },
+    {
+      "round": 3,
+      "full_name": "galeone/tfgo",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 971,
+      "stars": 2491,
+      "curious": false
+    },
+    {
+      "round": 3,
+      "full_name": "AhmadElsagheer/Competitive-programming-library",
+      "match": 0.0,
+      "like": true,
+      "deep": false,
+      "dwell": 1228,
+      "stars": 2489,
+      "curious": false
+    },
+    {
+      "round": 4,
+      "full_name": "TIBCOSoftware/flogo",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 1252,
+      "stars": 2491,
+      "curious": false
+    },
+    {
+      "round": 4,
+      "full_name": "vuejs/vuex-router-sync",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 649,
+      "stars": 2490,
+      "curious": false
+    },
+    {
+      "round": 4,
+      "full_name": "TakuSemba/MultiSnapRecyclerView",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 1085,
+      "stars": 2492,
+      "curious": false
+    },
+    {
+      "round": 4,
+      "full_name": "zjw-swun/AppMethodOrder",
+      "match": 0.0,
+      "like": true,
+      "deep": false,
+      "dwell": 1192,
+      "stars": 2492,
+      "curious": false
+    },
+    {
+      "round": 4,
+      "full_name": "iglance/iGlance",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 697,
+      "stars": 2491,
+      "curious": false
+    },
+    {
+      "round": 4,
+      "full_name": "php-fig/link",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 535,
+      "stars": 2491,
+      "curious": false
+    },
+    {
+      "round": 4,
+      "full_name": "fluture-js/Fluture",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 1182,
+      "stars": 2493,
+      "curious": false
+    },
+    {
+      "round": 4,
+      "full_name": "bigardone/phoenix-trello",
+      "match": 0.118,
+      "like": false,
+      "deep": true,
+      "dwell": 7890,
+      "stars": 2492,
+      "curious": true
+    },
+    {
+      "round": 4,
+      "full_name": "selfspy/selfspy",
+      "match": 0.202,
+      "like": false,
+      "deep": true,
+      "dwell": 3089,
+      "stars": 2494,
+      "curious": false
+    },
+    {
+      "round": 4,
+      "full_name": "yformer/EfficientSAM",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 1076,
+      "stars": 2493,
+      "curious": false
+    },
+    {
+      "round": 5,
+      "full_name": "yanzhenjie/Album",
+      "match": 0.05,
+      "like": true,
+      "deep": false,
+      "dwell": 1561,
+      "stars": 2492,
+      "curious": false
+    },
+    {
+      "round": 5,
+      "full_name": "pyston/pyston",
+      "match": 0.202,
+      "like": true,
+      "deep": false,
+      "dwell": 2295,
+      "stars": 2493,
+      "curious": false
+    },
+    {
+      "round": 5,
+      "full_name": "sthalles/SimCLR",
+      "match": 0.235,
+      "like": true,
+      "deep": false,
+      "dwell": 2448,
+      "stars": 2493,
+      "curious": false
+    },
+    {
+      "round": 5,
+      "full_name": "duoergun0729/nlp",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 967,
+      "stars": 2493,
+      "curious": false
+    },
+    {
+      "round": 5,
+      "full_name": "sindresorhus/awesome",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 815,
+      "stars": 505216,
+      "curious": false
+    },
+    {
+      "round": 5,
+      "full_name": "vinta/awesome-python",
+      "match": 0.202,
+      "like": false,
+      "deep": false,
+      "dwell": 2042,
+      "stars": 320106,
+      "curious": false
+    },
+    {
+      "round": 5,
+      "full_name": "0xSojalSec/LLMs-local",
+      "match": 0.302,
+      "like": true,
+      "deep": false,
+      "dwell": 2789,
+      "stars": 1177,
+      "curious": false
+    },
+    {
+      "round": 5,
+      "full_name": "prophesier/diff-svc",
+      "match": 0.336,
+      "like": false,
+      "deep": true,
+      "dwell": 4352,
+      "stars": 2715,
+      "curious": false
+    },
+    {
+      "round": 5,
+      "full_name": "LeCoupa/awesome-cheatsheets",
+      "match": 0.084,
+      "like": false,
+      "deep": false,
+      "dwell": 2099,
+      "stars": 46453,
+      "curious": false
+    },
+    {
+      "round": 5,
+      "full_name": "open-mmlab/Amphion",
+      "match": 0.286,
+      "like": true,
+      "deep": true,
+      "dwell": 4963,
+      "stars": 10285,
+      "curious": false
+    },
+    {
+      "round": 6,
+      "full_name": "donnemartin/system-design-primer",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 984,
+      "stars": 369480,
+      "curious": false
+    },
+    {
+      "round": 6,
+      "full_name": "PaddlePaddle/PaddleSpeech",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 890,
+      "stars": 12681,
+      "curious": false
+    },
+    {
+      "round": 6,
+      "full_name": "ComposioHQ/awesome-claude-skills",
+      "match": 0.185,
+      "like": false,
+      "deep": false,
+      "dwell": 1724,
+      "stars": 74885,
+      "curious": false
+    },
+    {
+      "round": 6,
+      "full_name": "RVC-Project/Retrieval-based-Voice-Conversion",
+      "match": 0.336,
+      "like": true,
+      "deep": true,
+      "dwell": 6002,
+      "stars": 617,
+      "curious": false
+    },
+    {
+      "round": 6,
+      "full_name": "RVC-Project/Retrieval-based-Voice-Conversion-WebUI",
+      "match": 0.54,
+      "like": true,
+      "deep": true,
+      "dwell": 7680,
+      "stars": 38191,
+      "curious": false
+    },
+    {
+      "round": 6,
+      "full_name": "he-y/Awesome-Pruning",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 1139,
+      "stars": 2497,
+      "curious": false
+    },
+    {
+      "round": 6,
+      "full_name": "jwasham/coding-interview-university",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 1126,
+      "stars": 360764,
+      "curious": false
+    },
+    {
+      "round": 6,
+      "full_name": "trimstray/the-book-of-secret-knowledge",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 1248,
+      "stars": 243264,
+      "curious": false
+    },
+    {
+      "round": 6,
+      "full_name": "jamesob/local-llm",
+      "match": 0.302,
+      "like": true,
+      "deep": false,
+      "dwell": 2591,
+      "stars": 1830,
+      "curious": false
+    },
+    {
+      "round": 6,
+      "full_name": "codecrafters-io/build-your-own-x",
+      "match": 0.202,
+      "like": false,
+      "deep": true,
+      "dwell": 4247,
+      "stars": 546655,
+      "curious": false
+    },
+    {
+      "round": 7,
+      "full_name": "lij768423-svg/grok-register-panel",
+      "match": 0.202,
+      "like": true,
+      "deep": true,
+      "dwell": 4431,
+      "stars": 900,
+      "curious": false
+    },
+    {
+      "round": 7,
+      "full_name": "0xShug0/audio.cpp",
+      "match": 0.391,
+      "like": true,
+      "deep": true,
+      "dwell": 7073,
+      "stars": 2600,
+      "curious": false
+    },
+    {
+      "round": 7,
+      "full_name": "mudler/LocalAI",
+      "match": 0.521,
+      "like": true,
+      "deep": true,
+      "dwell": 5731,
+      "stars": 49062,
+      "curious": false
+    },
+    {
+      "round": 7,
+      "full_name": "tensorflow/tensorflow",
+      "match": 0.202,
+      "like": true,
+      "deep": false,
+      "dwell": 2170,
+      "stars": 199715,
+      "curious": false
+    },
+    {
+      "round": 7,
+      "full_name": "vercel/next.js",
+      "match": 0.118,
+      "like": false,
+      "deep": false,
+      "dwell": 2175,
+      "stars": 142246,
+      "curious": false
+    },
+    {
+      "round": 7,
+      "full_name": "langgenius/dify",
+      "match": 0.185,
+      "like": true,
+      "deep": false,
+      "dwell": 2795,
+      "stars": 155475,
+      "curious": false
+    },
+    {
+      "round": 7,
+      "full_name": "ruvnet/RuView",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 931,
+      "stars": 93069,
+      "curious": false
+    },
+    {
+      "round": 7,
+      "full_name": "torvalds/linux",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 551,
+      "stars": 248312,
+      "curious": false
+    },
+    {
+      "round": 7,
+      "full_name": "Significant-Gravitas/AutoGPT",
+      "match": 0.185,
+      "like": true,
+      "deep": true,
+      "dwell": 3734,
+      "stars": 187273,
+      "curious": false
+    },
+    {
+      "round": 7,
+      "full_name": "agentforce314/clawcodex",
+      "match": 0.209,
+      "like": false,
+      "deep": false,
+      "dwell": 2264,
+      "stars": 897,
+      "curious": false
+    },
+    {
+      "round": 8,
+      "full_name": "tt-a1i/archify",
+      "match": 0.185,
+      "like": true,
+      "deep": true,
+      "dwell": 4247,
+      "stars": 58743,
+      "curious": false
+    },
+    {
+      "round": 8,
+      "full_name": "bytedance/deer-flow",
+      "match": 0.185,
+      "like": false,
+      "deep": false,
+      "dwell": 2920,
+      "stars": 82299,
+      "curious": false
+    },
+    {
+      "round": 8,
+      "full_name": "stablyai/orca",
+      "match": 0.185,
+      "like": false,
+      "deep": false,
+      "dwell": 2955,
+      "stars": 66898,
+      "curious": false
+    },
+    {
+      "round": 8,
+      "full_name": "selfspy/selfspy",
+      "match": 0.202,
+      "like": true,
+      "deep": true,
+      "dwell": 4203,
+      "stars": 2494,
+      "curious": false
+    },
+    {
+      "round": 8,
+      "full_name": "usebruno/bruno",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 1157,
+      "stars": 46900,
+      "curious": false
+    },
+    {
+      "round": 8,
+      "full_name": "vllm-project/vllm",
+      "match": 0.302,
+      "like": true,
+      "deep": true,
+      "dwell": 4818,
+      "stars": 91530,
+      "curious": true
+    },
+    {
+      "round": 8,
+      "full_name": "oven-sh/bun",
+      "match": 0.118,
+      "like": true,
+      "deep": false,
+      "dwell": 2719,
+      "stars": 95946,
+      "curious": false
+    },
+    {
+      "round": 8,
+      "full_name": "NousResearch/hermes-agent",
+      "match": 0.185,
+      "like": false,
+      "deep": true,
+      "dwell": 3875,
+      "stars": 244667,
+      "curious": false
+    },
+    {
+      "round": 8,
+      "full_name": "rtk-ai/rtk",
+      "match": 0.185,
+      "like": true,
+      "deep": true,
+      "dwell": 4402,
+      "stars": 80018,
+      "curious": false
+    },
+    {
+      "round": 8,
+      "full_name": "CelestoAI/SmolVM",
+      "match": 0.185,
+      "like": false,
+      "deep": true,
+      "dwell": 3587,
+      "stars": 900,
+      "curious": false
+    },
+    {
+      "round": 9,
+      "full_name": "huggingface/transformers",
+      "match": 0.562,
+      "like": false,
+      "deep": true,
+      "dwell": 10343,
+      "stars": 165136,
+      "curious": false
+    },
+    {
+      "round": 9,
+      "full_name": "TauricResearch/TradingAgents",
+      "match": 0.34,
+      "like": false,
+      "deep": true,
+      "dwell": 6460,
+      "stars": 104713,
+      "curious": false
+    },
+    {
+      "round": 9,
+      "full_name": "headroomlabs-ai/headroom",
+      "match": 0.185,
+      "like": true,
+      "deep": true,
+      "dwell": 3046,
+      "stars": 71619,
+      "curious": false
+    },
+    {
+      "round": 9,
+      "full_name": "toeverything/AFFiNE",
+      "match": 0.0,
+      "like": true,
+      "deep": false,
+      "dwell": 1002,
+      "stars": 72472,
+      "curious": false
+    },
+    {
+      "round": 9,
+      "full_name": "open-webui/open-webui",
+      "match": 0.302,
+      "like": false,
+      "deep": true,
+      "dwell": 3054,
+      "stars": 151691,
+      "curious": false
+    },
+    {
+      "round": 9,
+      "full_name": "mui/material-ui",
+      "match": 0.118,
+      "like": false,
+      "deep": false,
+      "dwell": 1404,
+      "stars": 99028,
+      "curious": false
+    },
+    {
+      "round": 9,
+      "full_name": "DietrichGebert/ponytail",
+      "match": 0.35,
+      "like": false,
+      "deep": true,
+      "dwell": 4738,
+      "stars": 135946,
+      "curious": false
+    },
+    {
+      "round": 9,
+      "full_name": "unslothai/unsloth",
+      "match": 0.185,
+      "like": false,
+      "deep": true,
+      "dwell": 4118,
+      "stars": 76044,
+      "curious": false
+    },
+    {
+      "round": 9,
+      "full_name": "DrewThomasson/ebook2audiobook",
+      "match": 0.286,
+      "like": false,
+      "deep": true,
+      "dwell": 6604,
+      "stars": 20153,
+      "curious": true
+    },
+    {
+      "round": 9,
+      "full_name": "rasbt/LLMs-from-scratch",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 1100,
+      "stars": 104796,
+      "curious": false
+    },
+    {
+      "round": 10,
+      "full_name": "yorkeccak/finance",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 518,
+      "stars": 897,
+      "curious": false
+    },
+    {
+      "round": 10,
+      "full_name": "langchain-ai/langchain",
+      "match": 0.269,
+      "like": false,
+      "deep": true,
+      "dwell": 4006,
+      "stars": 146156,
+      "curious": false
+    },
+    {
+      "round": 10,
+      "full_name": "mem0ai/mem0",
+      "match": 0.343,
+      "like": false,
+      "deep": true,
+      "dwell": 5876,
+      "stars": 65151,
+      "curious": true
+    },
+    {
+      "round": 10,
+      "full_name": "streamlit/streamlit",
+      "match": 0.202,
+      "like": false,
+      "deep": true,
+      "dwell": 3204,
+      "stars": 45735,
+      "curious": false
+    },
+    {
+      "round": 10,
+      "full_name": "ayghri/i-have-adhd",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 759,
+      "stars": 42221,
+      "curious": false
+    },
+    {
+      "round": 10,
+      "full_name": "calesthio/OpenMontage",
+      "match": 0.161,
+      "like": true,
+      "deep": false,
+      "dwell": 2196,
+      "stars": 57500,
+      "curious": false
+    },
+    {
+      "round": 10,
+      "full_name": "TheAlgorithms/Python",
+      "match": 0.167,
+      "like": false,
+      "deep": true,
+      "dwell": 3297,
+      "stars": 224497,
+      "curious": false
+    },
+    {
+      "round": 10,
+      "full_name": "multimodal-art-projection/YuE",
+      "match": 0.415,
+      "like": true,
+      "deep": true,
+      "dwell": 8253,
+      "stars": 6932,
+      "curious": false
+    },
+    {
+      "round": 10,
+      "full_name": "apache/superset",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 671,
+      "stars": 74722,
+      "curious": false
+    },
+    {
+      "round": 10,
+      "full_name": "OpenBMB/VoxCPM",
+      "match": 0.337,
+      "like": false,
+      "deep": true,
+      "dwell": 3227,
+      "stars": 36961,
+      "curious": false
+    },
+    {
+      "round": 11,
+      "full_name": "debpalash/VoiceStudio",
+      "match": 0.367,
+      "like": false,
+      "deep": true,
+      "dwell": 3039,
+      "stars": 22644,
+      "curious": false
+    },
+    {
+      "round": 11,
+      "full_name": "OpenMOSS/MOSS-TTS-Nano",
+      "match": 0.529,
+      "like": true,
+      "deep": true,
+      "dwell": 6569,
+      "stars": 4330,
+      "curious": false
+    },
+    {
+      "round": 11,
+      "full_name": "High-Logic/Genie-TTS",
+      "match": 0.474,
+      "like": true,
+      "deep": true,
+      "dwell": 8204,
+      "stars": 1774,
+      "curious": false
+    },
+    {
+      "round": 11,
+      "full_name": "OpenHands/OpenHands",
+      "match": 0.349,
+      "like": true,
+      "deep": true,
+      "dwell": 4759,
+      "stars": 87574,
+      "curious": false
+    },
+    {
+      "round": 11,
+      "full_name": "netease-youdao/EmotiVoice",
+      "match": 0.427,
+      "like": false,
+      "deep": true,
+      "dwell": 3887,
+      "stars": 8524,
+      "curious": false
+    },
+    {
+      "round": 11,
+      "full_name": "joeseesun/qiaomu-goal-meta-skill",
+      "match": 0.185,
+      "like": false,
+      "deep": true,
+      "dwell": 3699,
+      "stars": 900,
+      "curious": false
+    },
+    {
+      "round": 11,
+      "full_name": "OpenMOSS/MOSS-TTS",
+      "match": 0.597,
+      "like": true,
+      "deep": true,
+      "dwell": 6399,
+      "stars": 4089,
+      "curious": false
+    },
+    {
+      "round": 11,
+      "full_name": "affaan-m/ECC",
+      "match": 0.342,
+      "like": false,
+      "deep": true,
+      "dwell": 3965,
+      "stars": 256613,
+      "curious": false
+    },
+    {
+      "round": 11,
+      "full_name": "yt-dlp/yt-dlp",
+      "match": 0.202,
+      "like": false,
+      "deep": true,
+      "dwell": 4459,
+      "stars": 190523,
+      "curious": false
+    },
+    {
+      "round": 11,
+      "full_name": "marswaveai/TypeNo",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 801,
+      "stars": 897,
+      "curious": false
+    },
+    {
+      "round": 12,
+      "full_name": "jianchang512/pyvideotrans",
+      "match": 0.273,
+      "like": false,
+      "deep": true,
+      "dwell": 3578,
+      "stars": 18972,
+      "curious": false
+    },
+    {
+      "round": 12,
+      "full_name": "trace-cortex/cortex-app",
+      "match": 0.185,
+      "like": true,
+      "deep": false,
+      "dwell": 1743,
+      "stars": 898,
+      "curious": false
+    },
+    {
+      "round": 12,
+      "full_name": "QwenAudio/CosyVoice",
+      "match": 0.476,
+      "like": true,
+      "deep": true,
+      "dwell": 7739,
+      "stars": 23579,
+      "curious": false
+    },
+    {
+      "round": 12,
+      "full_name": "Huanshere/VideoLingo",
+      "match": 0.273,
+      "like": false,
+      "deep": true,
+      "dwell": 4900,
+      "stars": 18422,
+      "curious": false
+    },
+    {
+      "round": 12,
+      "full_name": "IAHispano/Applio",
+      "match": 0.505,
+      "like": false,
+      "deep": true,
+      "dwell": 7153,
+      "stars": 3705,
+      "curious": false
+    },
+    {
+      "round": 12,
+      "full_name": "hiyouga/LlamaFactory",
+      "match": 0.185,
+      "like": true,
+      "deep": true,
+      "dwell": 3686,
+      "stars": 74718,
+      "curious": false
+    },
+    {
+      "round": 12,
+      "full_name": "rany2/edge-tts",
+      "match": 0.336,
+      "like": true,
+      "deep": true,
+      "dwell": 6095,
+      "stars": 11918,
+      "curious": false
+    },
+    {
+      "round": 12,
+      "full_name": "RVC-Boss/GPT-SoVITS",
+      "match": 0.555,
+      "like": true,
+      "deep": true,
+      "dwell": 7722,
+      "stars": 61704,
+      "curious": false
+    },
+    {
+      "round": 12,
+      "full_name": "Enemyx-net/VibeVoice-ComfyUI",
+      "match": 0.537,
+      "like": true,
+      "deep": true,
+      "dwell": 5851,
+      "stars": 1560,
+      "curious": true
+    },
+    {
+      "round": 12,
+      "full_name": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 892,
+      "stars": 126954,
+      "curious": false
+    },
+    {
+      "round": 13,
+      "full_name": "2noise/ChatTTS",
+      "match": 0.368,
+      "like": false,
+      "deep": true,
+      "dwell": 3808,
+      "stars": 39828,
+      "curious": false
+    },
+    {
+      "round": 13,
+      "full_name": "iamcheyan/fudoki",
+      "match": 0.0,
+      "like": true,
+      "deep": false,
+      "dwell": 1160,
+      "stars": 894,
+      "curious": false
+    },
+    {
+      "round": 13,
+      "full_name": "react/react",
+      "match": 0.166,
+      "like": false,
+      "deep": true,
+      "dwell": 3059,
+      "stars": 250048,
+      "curious": false
+    },
+    {
+      "round": 13,
+      "full_name": "ChatGPTNextWeb/NextChat",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 1114,
+      "stars": 88748,
+      "curious": false
+    },
+    {
+      "round": 13,
+      "full_name": "CorentinJ/Real-Time-Voice-Cloning",
+      "match": 0.544,
+      "like": false,
+      "deep": true,
+      "dwell": 7041,
+      "stars": 60124,
+      "curious": false
+    },
+    {
+      "round": 13,
+      "full_name": "FoundationAgents/MetaGPT",
+      "match": 0.348,
+      "like": false,
+      "deep": true,
+      "dwell": 5633,
+      "stars": 70330,
+      "curious": false
+    },
+    {
+      "round": 13,
+      "full_name": "puppeteer/puppeteer",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 663,
+      "stars": 95580,
+      "curious": false
+    },
+    {
+      "round": 13,
+      "full_name": "practical-tutorials/project-based-learning",
+      "match": 0.202,
+      "like": true,
+      "deep": true,
+      "dwell": 3737,
+      "stars": 283016,
+      "curious": true
+    },
+    {
+      "round": 13,
+      "full_name": "nari-labs/dia",
+      "match": 0.286,
+      "like": false,
+      "deep": true,
+      "dwell": 5057,
+      "stars": 19398,
+      "curious": false
+    },
+    {
+      "round": 13,
+      "full_name": "PlayVoice/whisper-vits-svc",
+      "match": 0.336,
+      "like": true,
+      "deep": true,
+      "dwell": 5647,
+      "stars": 2865,
+      "curious": false
+    },
+    {
+      "round": 14,
+      "full_name": "andabi/deep-voice-conversion",
+      "match": 0.336,
+      "like": true,
+      "deep": true,
+      "dwell": 6381,
+      "stars": 3938,
+      "curious": false
+    },
+    {
+      "round": 14,
+      "full_name": "wiseman/py-webrtcvad",
+      "match": 0.38,
+      "like": false,
+      "deep": true,
+      "dwell": 3615,
+      "stars": 2499,
+      "curious": false
+    },
+    {
+      "round": 14,
+      "full_name": "jackfrued/Python-100-Days",
+      "match": 0.202,
+      "like": true,
+      "deep": true,
+      "dwell": 3320,
+      "stars": 186326,
+      "curious": false
+    },
+    {
+      "round": 14,
+      "full_name": "myshell-ai/OpenVoice",
+      "match": 0.475,
+      "like": false,
+      "deep": true,
+      "dwell": 4173,
+      "stars": 37496,
+      "curious": false
+    },
+    {
+      "round": 14,
+      "full_name": "react/create-react-app",
+      "match": 0.118,
+      "like": false,
+      "deep": true,
+      "dwell": 3248,
+      "stars": 103259,
+      "curious": false
+    },
+    {
+      "round": 14,
+      "full_name": "timdream/wordcloud2.js",
+      "match": 0.034,
+      "like": false,
+      "deep": false,
+      "dwell": 1268,
+      "stars": 2498,
+      "curious": false
+    },
+    {
+      "round": 14,
+      "full_name": "trekhleb/javascript-algorithms",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 893,
+      "stars": 196681,
+      "curious": false
+    },
+    {
+      "round": 14,
+      "full_name": "nv-tlabs/ardy",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 1189,
+      "stars": 896,
+      "curious": false
+    },
+    {
+      "round": 14,
+      "full_name": "babysor/MockingBird",
+      "match": 0.336,
+      "like": true,
+      "deep": true,
+      "dwell": 6323,
+      "stars": 36908,
+      "curious": false
+    },
+    {
+      "round": 14,
+      "full_name": "abus-aikorea/voice-pro",
+      "match": 0.507,
+      "like": true,
+      "deep": true,
+      "dwell": 7080,
+      "stars": 12792,
+      "curious": false
+    },
+    {
+      "round": 15,
+      "full_name": "Graphify-Labs/graphify",
+      "match": 0.185,
+      "like": false,
+      "deep": false,
+      "dwell": 2729,
+      "stars": 117048,
+      "curious": false
+    },
+    {
+      "round": 15,
+      "full_name": "microsoft/vscode",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 659,
+      "stars": 192028,
+      "curious": false
+    },
+    {
+      "round": 15,
+      "full_name": "k2-fsa/sherpa-onnx",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 593,
+      "stars": 14730,
+      "curious": false
+    },
+    {
+      "round": 15,
+      "full_name": "code-yeongyu/oh-my-openagent",
+      "match": 0.185,
+      "like": false,
+      "deep": true,
+      "dwell": 3264,
+      "stars": 68951,
+      "curious": false
+    },
+    {
+      "round": 15,
+      "full_name": "microsoft/ai-agents-for-beginners",
+      "match": 0.185,
+      "like": false,
+      "deep": true,
+      "dwell": 3009,
+      "stars": 74481,
+      "curious": false
+    },
+    {
+      "round": 15,
+      "full_name": "Asabeneh/30-Days-Of-Python",
+      "match": 0.214,
+      "like": true,
+      "deep": true,
+      "dwell": 4148,
+      "stars": 73540,
+      "curious": false
+    },
+    {
+      "round": 15,
+      "full_name": "massgravel/Microsoft-Activation-Scripts",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 941,
+      "stars": 190247,
+      "curious": false
+    },
+    {
+      "round": 15,
+      "full_name": "sqlmapproject/sqlmap",
+      "match": 0.084,
+      "like": false,
+      "deep": false,
+      "dwell": 2533,
+      "stars": 38420,
+      "curious": false
+    },
+    {
+      "round": 15,
+      "full_name": "liuzhao1225/YouDub-webui",
+      "match": 0.05,
+      "like": false,
+      "deep": false,
+      "dwell": 1515,
+      "stars": 5463,
+      "curious": false
+    },
+    {
+      "round": 15,
+      "full_name": "harry0703/MoneyPrinterTurbo",
+      "match": 0.323,
+      "like": true,
+      "deep": true,
+      "dwell": 6928,
+      "stars": 122564,
+      "curious": false
+    },
+    {
+      "round": 16,
+      "full_name": "firecrawl/firecrawl",
+      "match": 0.185,
+      "like": true,
+      "deep": true,
+      "dwell": 3239,
+      "stars": 179274,
+      "curious": false
+    },
+    {
+      "round": 16,
+      "full_name": "shadcn-ui/ui",
+      "match": 0.118,
+      "like": false,
+      "deep": false,
+      "dwell": 2884,
+      "stars": 123598,
+      "curious": false
+    },
+    {
+      "round": 16,
+      "full_name": "ohmyzsh/ohmyzsh",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 807,
+      "stars": 189677,
+      "curious": false
+    },
+    {
+      "round": 16,
+      "full_name": "browser-use/browser-use",
+      "match": 0.386,
+      "like": false,
+      "deep": true,
+      "dwell": 3227,
+      "stars": 114273,
+      "curious": false
+    },
+    {
+      "round": 16,
+      "full_name": "mattpocock/skills",
+      "match": 0.185,
+      "like": false,
+      "deep": true,
+      "dwell": 4167,
+      "stars": 259911,
+      "curious": false
+    },
+    {
+      "round": 16,
+      "full_name": "datawhalechina/hello-agents",
+      "match": 0.345,
+      "like": false,
+      "deep": true,
+      "dwell": 6041,
+      "stars": 78471,
+      "curious": false
+    },
+    {
+      "round": 16,
+      "full_name": "shareAI-lab/learn-claude-code",
+      "match": 0.356,
+      "like": true,
+      "deep": true,
+      "dwell": 5028,
+      "stars": 76579,
+      "curious": false
+    },
+    {
+      "round": 16,
+      "full_name": "sunbigfly/ppt-agent-skills",
+      "match": 0.185,
+      "like": false,
+      "deep": true,
+      "dwell": 4106,
+      "stars": 893,
+      "curious": false
+    },
+    {
+      "round": 16,
+      "full_name": "obra/superpowers",
+      "match": 0.185,
+      "like": false,
+      "deep": true,
+      "dwell": 3731,
+      "stars": 285448,
+      "curious": false
+    },
+    {
+      "round": 16,
+      "full_name": "Mintplex-Labs/anything-llm",
+      "match": 0.344,
+      "like": false,
+      "deep": true,
+      "dwell": 5614,
+      "stars": 65945,
+      "curious": true
+    },
+    {
+      "round": 17,
+      "full_name": "sitimas9/ghsibudi",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 846,
+      "stars": 898,
+      "curious": false
+    },
+    {
+      "round": 17,
+      "full_name": "CameronFoxly/Ascii-Motion",
+      "match": 0.0,
+      "like": true,
+      "deep": false,
+      "dwell": 1057,
+      "stars": 899,
+      "curious": false
+    },
+    {
+      "round": 17,
+      "full_name": "farion1231/cc-switch",
+      "match": 0.185,
+      "like": false,
+      "deep": false,
+      "dwell": 2123,
+      "stars": 132404,
+      "curious": false
+    },
+    {
+      "round": 17,
+      "full_name": "The-Vibe-Company/quivr",
+      "match": 0.144,
+      "like": false,
+      "deep": false,
+      "dwell": 1849,
+      "stars": 39509,
+      "curious": false
+    },
+    {
+      "round": 17,
+      "full_name": "multica-ai/andrej-karpathy-skills",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 1234,
+      "stars": 212420,
+      "curious": false
+    },
+    {
+      "round": 17,
+      "full_name": "vndee/local-talking-llm",
+      "match": 0.302,
+      "like": true,
+      "deep": true,
+      "dwell": 9907,
+      "stars": 891,
+      "curious": true
+    },
+    {
+      "round": 17,
+      "full_name": "index-tts/index-tts",
+      "match": 0.457,
+      "like": true,
+      "deep": true,
+      "dwell": 7176,
+      "stars": 23903,
+      "curious": false
+    },
+    {
+      "round": 17,
+      "full_name": "alephpi/Texo",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 886,
+      "stars": 895,
+      "curious": false
+    },
+    {
+      "round": 17,
+      "full_name": "MiniMax-AI/MiniMax-MCP",
+      "match": 0.05,
+      "like": false,
+      "deep": false,
+      "dwell": 1227,
+      "stars": 1577,
+      "curious": false
+    },
+    {
+      "round": 17,
+      "full_name": "agno-agi/agno",
+      "match": 0.273,
+      "like": false,
+      "deep": true,
+      "dwell": 5102,
+      "stars": 42142,
+      "curious": false
+    },
+    {
+      "round": 18,
+      "full_name": "ultraworkers/claw-code",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 1227,
+      "stars": 195208,
+      "curious": false
+    },
+    {
+      "round": 18,
+      "full_name": "deepseek-ai/deepseek-harness",
+      "match": 0.185,
+      "like": false,
+      "deep": true,
+      "dwell": 3500,
+      "stars": 220767,
+      "curious": false
+    },
+    {
+      "round": 18,
+      "full_name": "anomalyco/opencode",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 1028,
+      "stars": 206796,
+      "curious": false
+    },
+    {
+      "round": 18,
+      "full_name": "ollama/ollama",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 745,
+      "stars": 180704,
+      "curious": false
+    },
+    {
+      "round": 18,
+      "full_name": "n8n-io/n8n",
+      "match": 0.0,
+      "like": true,
+      "deep": false,
+      "dwell": 734,
+      "stars": 204050,
+      "curious": false
+    },
+    {
+      "round": 18,
+      "full_name": "react/react-native",
+      "match": 0.118,
+      "like": true,
+      "deep": true,
+      "dwell": 3171,
+      "stars": 126560,
+      "curious": false
+    },
+    {
+      "round": 18,
+      "full_name": "DigitalPlatDev/FreeDomain",
+      "match": 0.0,
+      "like": true,
+      "deep": false,
+      "dwell": 1099,
+      "stars": 198845,
+      "curious": false
+    },
+    {
+      "round": 18,
+      "full_name": "dair-ai/Prompt-Engineering-Guide",
+      "match": 0.33,
+      "like": false,
+      "deep": true,
+      "dwell": 6427,
+      "stars": 78218,
+      "curious": false
+    },
+    {
+      "round": 18,
+      "full_name": "TheStageAI/TheWhisper",
+      "match": 0.302,
+      "like": false,
+      "deep": true,
+      "dwell": 5770,
+      "stars": 897,
+      "curious": false
+    },
+    {
+      "round": 18,
+      "full_name": "raphaelsalaja/userinterface-wiki",
+      "match": 0.0,
+      "like": false,
+      "deep": true,
+      "dwell": 5903,
+      "stars": 895,
+      "curious": true
+    },
+    {
+      "round": 19,
+      "full_name": "meijieru/crnn.pytorch",
+      "match": 0.0,
+      "like": true,
+      "deep": false,
+      "dwell": 1161,
+      "stars": 2496,
+      "curious": false
+    },
+    {
+      "round": 19,
+      "full_name": "openmemind/memind",
+      "match": 0.185,
+      "like": true,
+      "deep": true,
+      "dwell": 4282,
+      "stars": 898,
+      "curious": false
+    },
+    {
+      "round": 19,
+      "full_name": "dundunnp/auto_xuexiqiangguo",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 825,
+      "stars": 2497,
+      "curious": false
+    },
+    {
+      "round": 19,
+      "full_name": "hardikkamboj/An-Introduction-to-Statistical-Learning",
+      "match": 0.202,
+      "like": true,
+      "deep": false,
+      "dwell": 2115,
+      "stars": 2497,
+      "curious": false
+    },
+    {
+      "round": 19,
+      "full_name": "996icu/996.ICU",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 1261,
+      "stars": 276974,
+      "curious": false
+    },
+    {
+      "round": 19,
+      "full_name": "filipedeschamps/video-maker",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 891,
+      "stars": 2498,
+      "curious": false
+    },
+    {
+      "round": 19,
+      "full_name": "makeyourownneuralnetwork/makeyourownneuralnetwork",
+      "match": 0.0,
+      "like": true,
+      "deep": false,
+      "dwell": 1264,
+      "stars": 2495,
+      "curious": false
+    },
+    {
+      "round": 19,
+      "full_name": "P0cL4bs/wifipumpkin3",
+      "match": 0.202,
+      "like": true,
+      "deep": false,
+      "dwell": 2897,
+      "stars": 2499,
+      "curious": false
+    },
+    {
+      "round": 19,
+      "full_name": "mozilla/TTS",
+      "match": 0.389,
+      "like": true,
+      "deep": true,
+      "dwell": 6282,
+      "stars": 10171,
+      "curious": false
+    },
+    {
+      "round": 19,
+      "full_name": "SlexAxton/yepnope.js",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 952,
+      "stars": 2498,
+      "curious": false
+    },
+    {
+      "round": 20,
+      "full_name": "GitHubDaily/GitHubDaily",
+      "match": 0.118,
+      "like": false,
+      "deep": false,
+      "dwell": 1954,
+      "stars": 47874,
+      "curious": false
+    },
+    {
+      "round": 20,
+      "full_name": "CyC2018/CS-Notes",
+      "match": 0.202,
+      "like": true,
+      "deep": false,
+      "dwell": 2213,
+      "stars": 186008,
+      "curious": false
+    },
+    {
+      "round": 20,
+      "full_name": "reduxjs/redux-mock-store",
+      "match": 0.0,
+      "like": true,
+      "deep": true,
+      "dwell": 5515,
+      "stars": 2497,
+      "curious": true
+    },
+    {
+      "round": 20,
+      "full_name": "Bhanunamikaze/Agentic-SEO-Skill",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 880,
+      "stars": 899,
+      "curious": false
+    },
+    {
+      "round": 20,
+      "full_name": "argyleink/prop-for-that",
+      "match": 0.0,
+      "like": false,
+      "deep": false,
+      "dwell": 530,
+      "stars": 900,
+      "curious": false
+    },
+    {
+      "round": 20,
+      "full_name": "fivetaku/fablize",
+      "match": 0.185,
+      "like": false,
+      "deep": true,
+      "dwell": 4419,
+      "stars": 895,
+      "curious": false
+    },
+    {
+      "round": 20,
+      "full_name": "getify/You-Dont-Know-JS",
+      "match": 0.034,
+      "like": false,
+      "deep": false,
+      "dwell": 1521,
+      "stars": 184860,
+      "curious": false
+    },
+    {
+      "round": 20,
+      "full_name": "ossu/computer-science",
+      "match": 0.034,
+      "like": false,
+      "deep": false,
+      "dwell": 793,
+      "stars": 208936,
+      "curious": false
+    },
+    {
+      "round": 20,
+      "full_name": "coqui-ai/TTS",
+      "match": 0.374,
+      "like": true,
+      "deep": true,
+      "dwell": 7780,
+      "stars": 46000,
+      "curious": false
+    },
+    {
+      "round": 20,
+      "full_name": "vuejs/vue",
+      "match": 0.118,
+      "like": false,
+      "deep": true,
+      "dwell": 3045,
+      "stars": 212465,
+      "curious": false
+    }
+  ],
+  "logreg": {
+    "n": 200,
+    "pos_rate": 0.6,
+    "acc_train": 0.856,
+    "acc_test": 0.775,
+    "auc_test": 0.781,
+    "weights": {
+      "llm": 1.338,
+      "inference": 0.875,
+      "quantization": 0.0,
+      "gguf": 0.0,
+      "voice": 1.271,
+      "tts": 1.041,
+      "rvc": 0.196,
+      "audio": 1.216,
+      "agent": 1.106,
+      "embedding": 0.0,
+      "python": 1.428,
+      "rust": 0.388,
+      "frontend": 0.038,
+      "react": 0.272,
+      "database": -0.418,
+      "training": 0.728,
+      "finetune": 0.0,
+      "video": 0.131,
+      "education": -0.266,
+      "cloud": -0.488
+    }
+  },
+  "summary": {
+    "feed_match_early": 0.103,
+    "feed_match_late": 0.099,
+    "feed_match_gain": -0.004,
+    "profile_align_late": 0.658,
+    "cards_served": 200,
+    "like_rate": 0.35
+  }
+}

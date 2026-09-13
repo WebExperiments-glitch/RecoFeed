@@ -367,3 +367,61 @@ CREATE TABLE IF NOT EXISTS refill_log (
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_refill_user_time ON refill_log(user_id, created_at DESC);
+
+
+-- ------------------------------------------------------------
+-- 13. 用户自定义兴趣关键词（画像面板手动维护，可驱动爬虫抓取）
+-- ------------------------------------------------------------
+-- 用途：
+--   ① 用户在「我的兴趣画像」里手动添加的方向词；
+--   ② POST /api/queue/crawl 让 Scrapling 爬虫按这些词抓 GitHub 真实仓库；
+--   ③ build_fetch_plan 把它们作为最高优先级补货方向注入。
+CREATE TABLE IF NOT EXISTS user_keywords (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  keyword    TEXT    NOT NULL,
+  weight     REAL    NOT NULL DEFAULT 1.0,
+  created_at TEXT    NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (user_id, keyword)
+);
+CREATE INDEX IF NOT EXISTS idx_kw_user ON user_keywords(user_id, weight DESC);
+
+
+-- ------------------------------------------------------------
+-- 14. 登录会话（GitHub OAuth / PAT 登录后签发）
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS auth_sessions (
+  token      TEXT PRIMARY KEY,
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  expires_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_session_user ON auth_sessions(user_id);
+
+
+-- ------------------------------------------------------------
+-- 15. GitHub 实证圈（自建仓库 / 点星仓库 → 最强兴趣信号）
+-- ------------------------------------------------------------
+-- 用途：
+--   ① 用户自己做的仓库 = 他真在动手写 → 铁证级兴趣（权重最高）
+--   ② 用户点星的仓库   = 他明确觉得有意思 → 强证据
+-- 权重规则：
+--   owned   看 pushed_at：7 天内 0.5 / 30 天内 0.2 / 90 天 0.12 / 180 天 0.08 …
+--   starred 按仓库星数排名：第 1 名 0.4 / 第 10 名 0.3 / 第 20 名 0.2 / 长尾递减
+CREATE TABLE IF NOT EXISTS github_footprint (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  source      TEXT    NOT NULL,          -- 'owned' 自建 / 'starred' 点星
+  full_name   TEXT    NOT NULL,
+  repo_stars  INTEGER NOT NULL DEFAULT 0,
+  pushed_at   TEXT,
+  weight      REAL    NOT NULL DEFAULT 0,
+  rank        INTEGER,
+  language    TEXT,
+  topics_json TEXT,
+  html_url    TEXT,
+  fetched_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (user_id, source, full_name)
+);
+CREATE INDEX IF NOT EXISTS idx_footprint_user
+  ON github_footprint(user_id, source, weight DESC);
