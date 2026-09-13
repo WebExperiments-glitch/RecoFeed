@@ -153,7 +153,7 @@ def run(conn) -> bool:
     #    原实现在空库上跑，画像为空 → build_fetch_plan 走 cold_start 分支
     #    → 方向是 [awesome, starter, toolkit] → 交集必然为空 → 假失败。
     #    要测"定向补货"，得先让用户有明确的兴趣方向。
-    from profile.service import rebuild_profile
+    from user_profile.service import rebuild_profile
     from feed.refill import build_fetch_plan
     interest = conn.execute(
         """SELECT id FROM repos

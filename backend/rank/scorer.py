@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from core.config import RANK_WEIGHTS
-from profile.builder import TagVector, tag_overlap
+from user_profile.builder import TagVector, tag_overlap
 
 
 def _hours_since(ts: str | None) -> float:

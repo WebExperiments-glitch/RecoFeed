@@ -33,7 +33,7 @@ from pool.state_machine import (  # noqa: E402
     record_event,
     record_impression,
 )
-from profile.service import rebuild_profile  # noqa: E402
+from user_profile.service import rebuild_profile  # noqa: E402
 from tags.extractor import init_jieba  # noqa: E402
 
 # 模拟用户的兴趣画像（用标签表达）
@@ -220,7 +220,7 @@ def report() -> None:
         print("\n" + "=" * 74)
         print("  ③  兴趣召回是否激活")
         print("=" * 74)
-        from profile.builder import TagVector
+        from user_profile.builder import TagVector
         from recall.channels import recall_interest
         import json as _json
         tv = TagVector()

@@ -180,16 +180,28 @@ def _gh_search(keyword: str, per_page: int) -> list[dict[str, Any]]:
 
 # ---------------------------------------------------------------- 规范化入库
 
-def _normalize(it: dict[str, Any]) -> dict[str, Any] | None:
-    """GitHub item → repos 行。脏数据（fork/归档/无描述）返回 None。"""
-    if it.get("fork") or it.get("archived"):
+def _normalize(it: dict[str, Any], *, strict: bool = True,
+               source: str = "crawl") -> dict[str, Any] | None:
+    """GitHub item → repos 行。
+
+    strict=True（爬虫/点星）：过滤 fork、归档、无描述、低星 —— 保语料质量
+    strict=False（自建仓库）：无条件收 —— 用户亲手做的仓库是 0.5 权重的最强信号，
+                              哪怕 0 star、没写描述也必须进语料库
+    """
+    if it.get("fork") and source != "owned":
+        return None
+    if it.get("archived") and source != "owned":
         return None
     desc = (it.get("description") or "").strip()
-    if not desc:
-        return None
     stars = int(it.get("stargazers_count") or 0)
-    if stars < 20:
-        return None
+    if strict:
+        if stars < 20:
+            return None
+        if not desc:
+            return None
+    owner, _, name = it["full_name"].partition("/")
+    if not desc:
+        desc = f"{owner}/{name}"
     pushed = _parse_gh_time(it["pushed_at"])
     created = _parse_gh_time(it["created_at"])
     days_push = max(0.0, (_now_utc() - pushed).total_seconds() / 86400)
@@ -197,7 +209,6 @@ def _normalize(it: dict[str, Any]) -> dict[str, Any] | None:
     stars_norm = min(1.0, math.log10(stars + 1) / 5.3)
     lic = it.get("license") or {}
     spdx, risk = license_risk(lic.get("spdx_id"))
-    owner, _, name = it["full_name"].partition("/")
     return dict(
         github_id=it["id"],
         owner=owner,

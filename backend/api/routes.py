@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
@@ -199,8 +200,23 @@ def get_feed(
             from api.translate_service import preheat_descriptions
             background_tasks.add_task(preheat_descriptions, ids)
 
+        # ⭐ 本地双塔重排：有个人模型（personal_model_u*.pth）时，
+        #    用「你的模型」对这页候选重新打分排序；没有模型则原样返回。
+        try:
+            from ml import rerank as ml_rerank
+            items, ml_info = ml_rerank.rerank(
+                conn, user_id, items,
+                get_repo_id=lambda it: int(it["repo_id"]),
+                get_score=lambda it: float(it.get("score") or 0.0),
+            )
+            if ml_info.get("applied"):
+                result.setdefault("meta", {})["ml_rerank"] = ml_info
+        except Exception as e:  # noqa: BLE001 —— 重排失败绝不能让 Feed 挂掉
+            logging.getLogger("recofeed").warning("本地重排跳过：%s", e)
+
         if search or langs or owners:
             return {"items": items, "meta": result["meta"]}
+        result["items"] = items          # 队列路径：把重排结果写回
         return result
 
 
@@ -382,7 +398,7 @@ PROFILE_TRIGGER_EVENTS = frozenset({
 def _refresh_profile(conn, user_id: int) -> None:
     """重建并落库用户画像（失败不阻断主流程）。"""
     try:
-        from profile.service import rebuild_profile
+        from user_profile.service import rebuild_profile
         rebuild_profile(conn, user_id)
     except Exception:
         logging.getLogger("recofeed").exception("画像重建失败 user=%s", user_id)
@@ -609,7 +625,7 @@ def rebuild_user_profile(user_id: int = Query(1)) -> dict[str, Any]:
     正常使用中画像会在 star / 深读 / 负反馈时自动重建，
     这个接口用于调试，或在批量导入用户足迹后手动触发。
     """
-    from profile.service import rebuild_profile
+    from user_profile.service import rebuild_profile
 
     with get_conn() as conn:
         tv = rebuild_profile(conn, user_id)
@@ -792,6 +808,81 @@ def auth_logout(request: Request) -> dict[str, Any]:
         with get_conn() as conn:
             drop_session(conn, tok)
     return {"ok": True}
+
+
+@router.get("/ml/status")
+def ml_status(user_id: int = Query(1)) -> dict[str, Any]:
+    """本地双塔模型状态：向量库 / 个人模型 / 证据量 / 后台任务进度。"""
+    from ml import state as ml_state
+    from ml import user_model
+    with get_conn() as conn:
+        out = user_model.status(conn, user_id)
+    out["tasks"] = ml_state.snapshot()
+    return out
+
+
+@router.post("/ml/embed")
+def ml_embed(
+    background_tasks: BackgroundTasks,
+    force: bool = Query(False, description="是否重建全部向量"),
+    limit: int | None = Query(None, description="条数上限（调试）"),
+) -> dict[str, Any]:
+    """物品塔：本地 embedding 向量化（后台跑，进度看 /api/ml/status）。
+
+    ⚠️ 首次运行会自动从魔搭下载模型（~100MB），可能耗时几分钟。
+    """
+    from ml import state as ml_state
+
+    def _job() -> None:
+        from ml import embedder
+        ml_state.set_embed(running=True, done=0, total=0, error=None)
+        try:
+            with get_conn() as conn:
+                def prog(done: int, total: int) -> None:
+                    ml_state.set_embed(done=done, total=total)
+                stats = embedder.build_all(conn, force=force, limit=limit, progress=prog)
+            ml_state.set_embed(running=False, done=stats["embedded"], total=stats["total"],
+                              finished_at=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"))
+        except Exception as e:  # noqa: BLE001
+            ml_state.set_embed(running=False, error=str(e))
+
+    background_tasks.add_task(_job)
+    return {"started": True, "hint": "进度查询 GET /api/ml/status"}
+
+
+@router.post("/ml/train")
+def ml_train(user_id: int = Query(1),
+             epochs: int = Query(100, ge=10, le=1000)) -> dict[str, Any]:
+    """用户塔 + 本地微调：训练个人模型（CPU 通常几秒），返回体检指标。"""
+    from ml import user_model
+    with get_conn() as conn:
+        res = user_model.train(conn, user_id, epochs=epochs)
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("reason", "训练失败"))
+    return res
+
+
+@router.get("/ml/recall")
+def ml_recall(user_id: int = Query(1),
+              k: int = Query(20, ge=1, le=100)) -> dict[str, Any]:
+    """向量召回演示：用用户向量在全部仓库里找最相近的 k 个（含个人模型打分）。"""
+    from ml import rerank, user_model
+    with get_conn() as conn:
+        cands = rerank.recall_by_embedding(conn, user_id, k=k)
+        if not cands:
+            return {"items": [], "note": "没有用户向量（先登录同步 / 刷几条，或先向量化）"}
+        ids = [rid for rid, _ in cands]
+        personal = user_model.score_repos(conn, user_id, ids)
+        items = []
+        for rid, cos in cands:
+            r = conn.execute(
+                "SELECT full_name, stars FROM repos WHERE id = ?", (rid,)
+            ).fetchone()
+            if r:
+                items.append({"repo_id": rid, "full_name": r["full_name"],
+                              "stars": r["stars"], "cosine": round(cos, 3),
+                              "personal_score": round(personal.get(rid, -1), 3)})
+    return {"items": items}
 
 
 @router.get("/user/events")

@@ -18,7 +18,7 @@ import random
 import sqlite3
 
 from core.config import RECALL_QUOTA
-from profile.builder import TagVector
+from user_profile.builder import TagVector
 from rank.scorer import Candidate
 
 
@@ -178,7 +178,7 @@ def recall_interest(conn: sqlite3.Connection, profile: TagVector,
     params: list = [f"%{t}%" for t in top_tags] + [limit * 4]
     rows = conn.execute(sql, _bind(params, user_id)).fetchall()
 
-    from profile.builder import tag_overlap
+    from user_profile.builder import tag_overlap
     scored: list[tuple[float, Candidate]] = []
     for row in rows:
         c = _row_to_candidate(row, "interest")

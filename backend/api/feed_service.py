@@ -21,7 +21,7 @@ from core.config import (
     COLD_START_TRENDING_RATIO,
     RANK_WEIGHTS,
 )
-from profile.builder import TagVector
+from user_profile.builder import TagVector
 from rank.rerank import (
     SearchIntervention,
     apply_search_intervention,
@@ -48,7 +48,7 @@ def load_profile(conn: sqlite3.Connection, user_id: int,
     """
     if auto_rebuild and not _profile_row_exists(conn, user_id):
         try:
-            from profile.service import rebuild_profile
+            from user_profile.service import rebuild_profile
             rebuild_profile(conn, user_id)
         except Exception:
             # 画像重建失败不应阻断 Feed，退化为空画像（冷启动路径）

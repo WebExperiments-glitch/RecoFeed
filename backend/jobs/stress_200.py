@@ -282,7 +282,7 @@ def run(conn) -> None:
     #    原实现直接读 user_profiles —— 但压测跑在事务里，
     #    且画像只在曝光/互动时增量更新，直接读会拿到空画像，
     #    导致"画像里 AI 词 0 个"这种假失败。
-    from profile.service import rebuild_profile
+    from user_profile.service import rebuild_profile
     rebuild_profile(conn, USER)
 
     p = conn.execute(

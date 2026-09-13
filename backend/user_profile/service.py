@@ -25,7 +25,7 @@ from core.config import (
     PROFILE_SOURCE_WEIGHTS,
     READ_WPM,
 )
-from profile.builder import (
+from user_profile.builder import (
     TagVector,
     owned_repo_weight,
     starred_repo_weight,

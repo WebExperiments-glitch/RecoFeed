@@ -330,6 +330,10 @@ def sync_footprint(conn: sqlite3.Connection, user_id: int,
         params={"sort": "created", "direction": "desc"},
     )
 
+    # 供 ③ 语料库导入使用（保留原始 GitHub item）
+    ingest_items = ([("owned", it) for it in owned]
+                    + [("starred", it) for it in starred_raw])
+
     # 点星榜排序：按仓库星数从高到低（用户规则），再算排名权重
     starred_sorted = sorted(
         starred_raw, key=lambda it: -int(it.get("stargazers_count") or 0)
@@ -361,6 +365,29 @@ def sync_footprint(conn: sqlite3.Connection, user_id: int,
             "html_url": it.get("html_url"),
         })
 
+    # ── ③ 实证仓库入语料库 ⭐（"猛推"的物理基础）
+    #    用户自己做的仓库和他点星的仓库，必须出现在推荐池里，
+    #    否则个人模型再准也没有可比对的候选。自建仓库无条件收（loose）。
+    from api.crawl_service import _insert_repo, _normalize
+    from pool.state_machine import ensure_pool as _ensure_pool
+
+    corpus_added = 0
+    corpus_updated = 0
+    for src, it in ingest_items:
+        norm = _normalize(it, strict=(src != "owned"), source=src)
+        if not norm:
+            continue
+        existed = conn.execute(
+            "SELECT 1 FROM repos WHERE full_name = ?", (norm["full_name"],)
+        ).fetchone()
+        rid = _insert_repo(conn, norm)
+        if rid:
+            _ensure_pool(conn, rid)
+            if existed:
+                corpus_updated += 1
+            else:
+                corpus_added += 1
+
     conn.execute("DELETE FROM github_footprint WHERE user_id = ?", (user_id,))
     for r in rows:
         if not r["full_name"]:
@@ -379,7 +406,7 @@ def sync_footprint(conn: sqlite3.Connection, user_id: int,
 
     # 同步完立刻重建画像（实证圈会以高权重进入画像）
     try:
-        from profile.service import rebuild_profile
+        from user_profile.service import rebuild_profile
         rebuild_profile(conn, user_id)
     except Exception:
         pass
@@ -387,6 +414,8 @@ def sync_footprint(conn: sqlite3.Connection, user_id: int,
     return {
         "owned": len(owned),
         "starred": len(starred_sorted),
+        "corpus_added": corpus_added,
+        "corpus_updated": corpus_updated,
         "owned_top": sorted(
             ({"full_name": r["full_name"], "weight": r["weight"],
               "pushed_at": r["pushed_at"]} for r in rows if r["source"] == "owned"),
