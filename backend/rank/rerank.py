@@ -13,7 +13,7 @@ from core.config import (
     SEARCH_MIX_RATIO,
     SEARCH_WEIGHT,
 )
-from profile.builder import tag_overlap
+from user_profile.builder import tag_overlap
 from rank.scorer import Candidate
 
 

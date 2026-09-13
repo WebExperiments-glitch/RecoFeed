@@ -80,6 +80,27 @@ RecoFeed 用**抖音的信息流范式**来做**开源仓库的发现**：
 
 ---
 
+## 本地双塔推荐模型（为每个人训练一个专属微型 AI）
+
+RecoFeed 不止「规则排序」—— 它在你电脑上为每个用户训练一个**专属的微型推荐模型**：
+
+| 组件 | 做法 | 产出 |
+|---|---|---|
+| 🗼 物品塔 Item Tower | 本地 embedding 模型（魔搭 `BAAI/bge-small-zh-v1.5`，512 维，CPU 毫秒级）把全部仓库的 README 摘要 + topics + 标签向量化 | SQLite BLOB 存储，零外部依赖 |
+| 🗼 用户塔 User Tower | 自建仓库 ×0.5 + 点星 ×0.4 + 深读/点赞 ×0.3，加权聚合成「用户语义向量」 | 512 维用户向量 |
+| 🧠 个人微调 | torch 训练 `512→128→1` MLP（CPU **0.16 秒** / 100 epoch） | `personal_model_u{id}.pth`，仅 271 KB |
+| 🎯 本地重排 | 结构化分 30% + 个人模型分 70% 融合排序 | 「热门的 firecrawl 被判 0 分，而你在写的 indexTTS 同类项目被顶上来」 |
+
+一键训练：`python backend/jobs/train_personal_model.py --user <id>`
+
+实测（真实账号）：留出集 **AUC 0.803 / 准确率 0.793**；重排把 `deepseek-harness`、`UI-TARS-desktop` 顶到前二，而热门的 `firecrawl` 被模型判 **0 分**降权 —— **它学的是"你"，不是"大家"**。
+
+### 机制有效性验证
+数字人类实验（20 轮真实 API 交互 + numpy 逻辑回归预测检验）→ [`docs/simulation_report.md`](docs/simulation_report.md)：
+画像对齐 0.514→0.698、命中率峰值 0.70、AUC 0.781。
+
+---
+
 ## 机制有效性验证（数字人类实验）
 
 推荐系统最容易自嗨。所以我们造了一个"数字人类"来验：

@@ -56,3 +56,6 @@ Scrapling-main.zip
 # 数据集：只提交脱敏快照；运行库 recofeed.db 属本机数据，永不提交
 # （导出快照：python scripts/export_dataset.py）
 !backend/data/recofeed.seed.db
+
+# 本地模型文件（首次运行自动从魔搭下载，不入库）
+backend/models/
