@@ -319,6 +319,15 @@ AUTH_FRONTEND_REDIRECT = os.getenv(
     "RECOFEED_FRONTEND", "http://localhost:5173").rstrip("/")
 SESSION_TTL_DAYS = 30
 
+# ⚠️ OAuth 回调地址：必须与 GitHub OAuth App 里登记的 Redirect URI **完全一致**，
+#    差一个字符都会报 redirect_uri_mismatch。
+#    这里固定成 127.0.0.1（不用 localhost）：因为 Vite 代理配了 changeOrigin=true，
+#    Host 会被改写成 127.0.0.1:8000，若用 localhost 会出现两种写法不一致的坑。
+GITHUB_OAUTH_REDIRECT_URI = os.getenv(
+    "RECOFEED_OAUTH_REDIRECT",
+    f"http://{HOST}:{PORT}/api/auth/github/callback",
+).strip()
+
 AUTH_CONFIGURED = bool(GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET)
 
 # ---------------------------------------------------------------- GitHub 实证圈权重

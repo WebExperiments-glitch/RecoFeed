@@ -686,15 +686,18 @@ def crawl_by_keywords(
 @router.get("/auth/status")
 def auth_status(request: Request) -> dict[str, Any]:
     """认证能力状态：OAuth 是否已配置 + 回调地址（配置 GitHub App 时要用）。"""
-    from core.config import AUTH_CONFIGURED
-    callback = f"{str(request.base_url).rstrip('/')}/api/auth/github/callback"
-    return {"configured": AUTH_CONFIGURED, "callback_url": callback}
+    from core.config import AUTH_CONFIGURED, GITHUB_OAUTH_REDIRECT_URI
+    return {
+        "configured": AUTH_CONFIGURED,
+        "callback_url": GITHUB_OAUTH_REDIRECT_URI,
+        "login_url": "/api/auth/github/login",
+    }
 
 
 @router.get("/auth/github/login")
 def auth_github_login(request: Request) -> Any:
     """跳转到 GitHub 授权页（注册/登录二合一：GitHub 侧新用户自动带过来）。"""
-    from core.config import AUTH_CONFIGURED
+    from core.config import AUTH_CONFIGURED, GITHUB_OAUTH_REDIRECT_URI
     if not AUTH_CONFIGURED:
         raise HTTPException(
             status_code=400,
@@ -702,8 +705,7 @@ def auth_github_login(request: Request) -> Any:
                    "client_id/secret 填进 backend/core/auth_local.json；"
                    "② 改用「令牌登录」POST /api/auth/github/pat（无需建 App）。",
         )
-    callback = f"{str(request.base_url).rstrip('/')}/api/auth/github/callback"
-    return RedirectResponse(build_login_url(callback))
+    return RedirectResponse(build_login_url(GITHUB_OAUTH_REDIRECT_URI))
 
 
 @router.get("/auth/github/callback")
