@@ -295,9 +295,17 @@ export function getAuthStatus(): Promise<AuthStatus> {
   return request<AuthStatus>('/auth/status')
 }
 
-/** OAuth 登录入口：整页跳转到后端，由后端 302 到 GitHub。 */
+/**
+ * OAuth 登录入口：**直连后端**（不走 Vite 代理），
+ * 这样 redirect_uri 恒为 http://127.0.0.1:8000/api/auth/github/callback，
+ * 与 GitHub OAuth App 里登记的地址严格一致，避免 redirect_uri_mismatch。
+ */
+const BACKEND_ORIGIN =
+  (import.meta.env.VITE_BACKEND_ORIGIN as string | undefined) ??
+  'http://127.0.0.1:8000'
+
 export function githubLoginUrl(): string {
-  return `${BASE}/auth/github/login`
+  return `${BACKEND_ORIGIN}${BASE}/auth/github/login`
 }
 
 /** 令牌登录（不用建 OAuth App；PAT 需含 read:user + public_repo 权限）。 */

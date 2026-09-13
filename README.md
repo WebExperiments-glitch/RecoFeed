@@ -159,6 +159,10 @@ pnpm dev                          # 已配置代理：/api → http://127.0.0.1:
 
 > **数据库已随仓库提供**（`backend/data/recofeed.db`，含 **258 个真实 GitHub 仓库**）。
 > 若想换一批数据：`python backend/jobs/seed_real.py --reset`（从 GitHub 实时拉取，README 走 jsdelivr CDN 补齐）。
+>
+> ⚠️ **提交数据集前请先脱敏**：`recofeed.db` 同时是运行中的数据库，会含登录令牌与会话。
+> 跑一次 `python scripts/sanitize_dataset.py`（清空 `users.github_token` 与 `auth_sessions`）再提交，
+> 别让凭据进 git 历史。
 
 ---
 
@@ -284,9 +288,13 @@ RecoFeed/
 |---|---|---|
 | ![feed](docs/screenshots/final3.png) | ![panel](docs/screenshots/panel.png) | ![detail](docs/screenshots/detail.png) |
 
-| 登录页 | 游客模式 |
-|---|---|
-| ![login](docs/screenshots/login.png) | ![guest](docs/screenshots/guest.png) |
+| GitHub 实证圈（真实登录后的权重） | 登录页 | 游客模式 |
+|---|---|---|
+| ![profile](docs/screenshots/profile-github.png) | ![login](docs/screenshots/login.png) | ![guest](docs/screenshots/guest.png) |
+
+> 上图是真实账号登录后的画像面板：自建的 `RecoFeed`（8 小时前推送）拿到 **0.50**，
+> `rvc-xpu`（14 天前）**0.20**；点星榜按星数排名 —— 第 1 名 `build-your-own-x`（★547k）**0.40**、
+> 第 2 名 `deepseek-harness` **0.37**、第 4 名 `ComfyUI` **0.34**。规则即文档。
 
 ---
 
