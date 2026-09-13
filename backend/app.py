@@ -45,6 +45,17 @@ async def lifespan(app: FastAPI):
     """启动前：建库 + 预热分词器；关闭时：无。"""
     t0 = time.perf_counter()
     DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    # ── 数据集引导 ──
+    # 仓库里提交的是**脱敏快照** recofeed.seed.db（不含任何令牌/会话/用户行为），
+    # 运行库 recofeed.db 属于本机数据、不入库。
+    # 首次 clone 后没有运行库 → 自动从快照复制一份，开箱即用。
+    seed_path = DB_PATH.parent / "recofeed.seed.db"
+    if not DB_PATH.exists() and seed_path.exists():
+        import shutil
+        shutil.copy2(seed_path, DB_PATH)
+        log.info("已从脱敏快照初始化运行库 → %s", DB_PATH)
+
     init_db()
     log.info("数据库就绪 → %s", DB_PATH)
     init_jieba()
