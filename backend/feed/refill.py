@@ -275,6 +275,24 @@ def build_fetch_plan(conn: sqlite3.Connection, user_id: int,
     """根据用户画像与行为指标，生成这次补货该抓什么。"""
     plan = FetchPlan()
 
+    # ── ⓪ 用户自定义关键词（画像面板维护）—— 最高优先级信号 ──
+    # 用户亲口指定的方向，直接占位且不受通用词过滤影响；
+    # 爬虫抓回来的仓库 topics 已并入标签，本地池挑选时天然命中。
+    try:
+        from api.crawl_service import get_user_keywords
+        custom = [k for k in get_user_keywords(conn, user_id) if k][:3]
+    except Exception:
+        custom = []
+
+    # ── ⓪b GitHub 实证圈方向词（自建仓库话题 > 点星仓库话题）──
+    # 这些是"用户亲手做过 / 明确收藏过"的技术方向，可信度仅次于自定义关键词，
+    # 优先拿去当抓取查询词 → 队列里这类仓库会明显变多（用户要的"猛推"）。
+    try:
+        from api.auth_service import footprint_preferred_queries
+        gh_queries = footprint_preferred_queries(conn, user_id, limit=4)
+    except Exception:
+        gh_queries = []
+
     # ── ① 高转化标签优先（最可靠信号）──
     conv = _high_conversion_tags(conn, user_id, limit=6)
     conv_tags = [t for t, rate in conv if rate >= 0.25]
@@ -316,14 +334,15 @@ def build_fetch_plan(conn: sqlite3.Connection, user_id: int,
             continue
         merged.append(tl)
 
-    # 画像太空（新用户）→ 没有方向可依据，退化为通用的"优质仓库"方向
-    if not merged:
+    # 画像太空（新用户）且没有自定义关键词 / 实证圈 → 退化为通用的"优质仓库"方向
+    if not merged and not custom and not gh_queries:
         plan.queries = ["awesome", "starter", "toolkit"]
         plan.labels = ["cold_start"]
         plan.explore_ratio = 0.4
         return plan
 
-    plan.queries = merged[:REFILL_MAX_QUERIES]
+    # 优先级：用户自定义关键词 > GitHub 实证圈方向 > 画像/高转化标签
+    plan.queries = (custom + gh_queries + merged)[:REFILL_MAX_QUERIES]
     plan.labels = ["high_conversion"] * min(len(conv_tags), REFILL_MAX_QUERIES)
     plan.domains = seen_domains[:5]
     # 画像里的标签越多，说明兴趣越明确，探索比例可以低一些

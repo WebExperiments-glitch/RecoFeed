@@ -214,3 +214,127 @@ RECALL_QUOTA: dict[str, int] = {
     "explore": 60,
     "similar": 60,
 }
+
+# ---------------------------------------------------------------- LLM 翻译（OpenRouter 免费链 + DeepSeek 付费兜底）
+# 用途：把仓库 标题 / description / README 翻成中文（解决"全是英文看不懂"）。
+#
+# ⚠️ 模型选型实测记录（2026-09-12）：
+#    MiniMax M3/M2.7 的 :free 通道已下架；未充值 OpenRouter key 走付费 402。
+#    级联顺序即降级顺序：免费模型 429/5xx/超时 → 自动切下一个；
+#    DeepSeek（付费）是链尾兜底 —— 只有免费模型全崩了才用，控制成本：
+#      ① nvidia/nemotron-3-super-120b-a12b:free   实测 18.7s/篇（OpenRouter 免费）
+#      ② nvidia/nemotron-3-ultra-550b-a55b:free   实测 77s/篇（OpenRouter 免费）
+#      ③ inclusionai/ling-3.0-flash-vl:free       （OpenRouter 免费）
+#      ④ deepseek-flash                           DeepSeek V4.1-Flash 付费兜底，
+#                                                 实测 1.9s/篇；官方文档确认可用
+#                                                 thinking.type=disabled 关闭思考模式，
+#                                                 翻译任务关掉后更快更省
+
+def _load_llm_keys() -> dict[str, str]:
+    """LLM key：优先环境变量，其次 backend/core/llm_local.json（已 gitignore）。"""
+    keys = {
+        "openrouter": os.getenv("OPENROUTER_API_KEY", "").strip(),
+        "deepseek": os.getenv("DEEPSEEK_API_KEY", "").strip(),
+    }
+    if keys["openrouter"] and keys["deepseek"]:
+        return keys
+    try:
+        import json
+        p = BACKEND_DIR / "core" / "llm_local.json"
+        data = json.loads(p.read_text(encoding="utf-8"))
+        for name in ("openrouter", "deepseek"):
+            if not keys[name]:
+                keys[name] = str(data.get(f"{name}_api_key", "")).strip()
+    except Exception:
+        pass
+    return keys
+
+_LLM_KEYS = _load_llm_keys()
+OPENROUTER_API_KEY = _LLM_KEYS["openrouter"]
+DEEPSEEK_API_KEY = _LLM_KEYS["deepseek"]
+
+OPENROUTER_BASE_URL = os.getenv(
+    "OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+DEEPSEEK_BASE_URL = os.getenv(
+    "DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+
+LLM_CHAIN: list[dict[str, str]] = [
+    {"id": "nvidia/nemotron-3-super-120b-a12b:free", "provider": "openrouter"},
+    {"id": "nvidia/nemotron-3-ultra-550b-a55b:free", "provider": "openrouter"},
+    {"id": "inclusionai/ling-3.0-flash-vl:free", "provider": "openrouter"},
+    {"id": "deepseek-flash", "provider": "deepseek"},
+]
+
+# DeepSeek 是付费模型：单独设日限额，防止免费模型集体故障时烧穿钱包
+DEEPSEEK_MAX_PER_DAY = 15
+
+# 防护参数 —— 免费档限流（未充值账户官方限制：20 req/min、50 req/day）
+# 本地限额留出余量，超限直接拒绝，不打上游 API。
+LLM_MAX_PER_MINUTE = 12        # 每分钟最多 12 次（官方 20）
+LLM_MAX_PER_DAY = 45           # 每日最多 45 次（官方 50，仅统计免费模型调用）
+LLM_MODEL_COOLDOWN_SEC = 120   # 某模型收到 429 后的独享冷却
+LLM_GLOBAL_COOLDOWN_SEC = 45   # 免费模型全部 429 时的全局冷却（期内直接拒绝）
+LLM_TIMEOUT_SEC = 75.0         # 单模型请求超时（免费档推理偏慢）
+LLM_MAX_TOKENS = 2500          # 输出 token 上限
+LLM_DESC_MAX_CHARS = 400       # description 送翻的最大长度
+LLM_README_MAX_CHARS = 2400    # README 送翻的最大长度（控制延迟与额度）
+
+
+# ---------------------------------------------------------------- GitHub OAuth
+def _load_auth_config() -> dict[str, str]:
+    """GitHub OAuth 配置：优先环境变量，其次 backend/core/auth_local.json（已 gitignore）。"""
+    cfg = {
+        "client_id": os.getenv("GITHUB_CLIENT_ID", "").strip(),
+        "client_secret": os.getenv("GITHUB_CLIENT_SECRET", "").strip(),
+        "auth_secret": os.getenv("RECOFEED_AUTH_SECRET", "").strip(),
+    }
+    if cfg["client_id"] and cfg["client_secret"] and cfg["auth_secret"]:
+        return cfg
+    try:
+        import json
+        p = BACKEND_DIR / "core" / "auth_local.json"
+        data = json.loads(p.read_text(encoding="utf-8"))
+        if not cfg["client_id"]:
+            cfg["client_id"] = str(data.get("github_client_id", "")).strip()
+        if not cfg["client_secret"]:
+            cfg["client_secret"] = str(data.get("github_client_secret", "")).strip()
+        if not cfg["auth_secret"]:
+            cfg["auth_secret"] = str(data.get("auth_secret", "")).strip()
+    except Exception:
+        pass
+    return cfg
+
+
+_AUTH = _load_auth_config()
+GITHUB_CLIENT_ID = _AUTH["client_id"]
+GITHUB_CLIENT_SECRET = _AUTH["client_secret"]
+# 会话签名密钥：没配就用固定 dev 值（本地开发够用，生产必须换）
+AUTH_SECRET = _AUTH["auth_secret"] or "recofeed-local-dev-secret"
+GITHUB_OAUTH_SCOPES = "read:user"
+GITHUB_API = "https://api.github.com"
+GITHUB_OAUTH_AUTHORIZE = "https://github.com/login/oauth/authorize"
+GITHUB_OAUTH_TOKEN = "https://github.com/login/oauth/access_token"
+# 登录成功后回跳的前端地址（Vite dev server）
+AUTH_FRONTEND_REDIRECT = os.getenv(
+    "RECOFEED_FRONTEND", "http://localhost:5173").rstrip("/")
+SESSION_TTL_DAYS = 30
+
+AUTH_CONFIGURED = bool(GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET)
+
+# ---------------------------------------------------------------- GitHub 实证圈权重
+# ⚠️ 数值由用户拍定：
+#   自建仓库（用户真在做的）> 点星仓库（用户觉得有意思），且要"非常猛地推"。
+#   自建仓库：看更新时间 —— 本周有更新 0.5，一个月内 0.2，之后继续衰减。
+#   点星仓库：按仓库星数从高到低排名 —— 第 1 名 0.4，第 10 名 0.3，第 20 名 0.2。
+GITHUB_OWNED_WEEK = 0.50      # 7 天内推送
+GITHUB_OWNED_MONTH = 0.20     # 30 天内推送
+GITHUB_OWNED_QUARTER = 0.12   # 90 天内
+GITHUB_OWNED_HALFYEAR = 0.08  # 180 天内
+GITHUB_OWNED_YEAR = 0.05      # 一年内
+GITHUB_OWNED_OLD = 0.03       # 更久
+GITHUB_STARRED_TOP = 0.40     # 点星榜第 1
+# 强信号放大：GitHub 实证圈进入画像时整体乘这个系数（"猛推"的量化开关）
+GITHUB_SIGNAL_BOOST = 2.0
+# 单次同步最多拉取多少（控制 API 调用量；OAuth 应用限额 5000/h，足够）
+GITHUB_SYNC_MAX_OWNED = 200
+GITHUB_SYNC_MAX_STARRED = 300

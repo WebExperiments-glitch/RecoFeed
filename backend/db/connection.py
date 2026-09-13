@@ -24,6 +24,10 @@ def connect(db_path: str | None = None) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA synchronous = NORMAL")
+    # ⚠️ 写锁等待：后台任务（翻译预热/补货/画像重建）与前台请求会并发写同一个库，
+    #    SQLite 同一时刻只允许一个写者，等不到锁就报 "database is locked"。
+    #    压测（jobs/ml_simulate.py）时实测会触发 500，所以显式放宽到 30s。
+    conn.execute("PRAGMA busy_timeout = 30000")
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
 

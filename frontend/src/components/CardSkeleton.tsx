@@ -34,9 +34,9 @@ const CardSkeleton: FC = () => (
     </div>
     {/* 底部指标 */}
     <div className="flex gap-3">
-      <div className="skeleton h-14 flex-1 rounded-2xl" />
-      <div className="skeleton h-14 flex-1 rounded-2xl" />
-      <div className="skeleton h-14 flex-1 rounded-2xl" />
+      <div className="skeleton h-14 flex-1 rounded-pearl" />
+      <div className="skeleton h-14 flex-1 rounded-pearl" />
+      <div className="skeleton h-14 flex-1 rounded-pearl" />
     </div>
   </div>
 )

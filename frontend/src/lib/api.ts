@@ -7,14 +7,25 @@
  *   ③ 不引入 axios —— fetch 够用，且少一个依赖
  */
 import type {
+  AuthStatus,
+  BatchTranslateResponse,
+  CrawlResult,
+  CustomKeywordUpsert,
   FeedResponse,
   HotResponse,
+  KeywordsResponse,
+  MeResponse,
   QueueStats,
   RepoDetail,
   SearchResponse,
+  SessionUser,
   SuggestResponse,
+  SyncResult,
+  TranslateResponse,
+  TranslateStatus,
   UserProfile,
 } from '@/types/api'
+import { getToken } from '@/lib/session'
 
 const BASE = '/api'
 const DEFAULT_TIMEOUT = 20_000
@@ -36,11 +47,14 @@ async function request<T>(
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), timeout)
   try {
+    // 登录令牌自动带上（lib/session 管理）
+    const token = getToken()
     const res = await fetch(`${BASE}${path}`, {
       ...init,
       signal: ctrl.signal,
       headers: {
         'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(init.headers ?? {}),
       },
     })
@@ -152,6 +166,48 @@ export function rebuildUserProfile(userId: number): Promise<unknown> {
   return request(`/user/profile/rebuild?user_id=${userId}`, { method: 'POST' })
 }
 
+// ------------------------------------------------------------------ 自定义关键词 & 爬虫
+
+export function getCustomKeywords(userId: number): Promise<KeywordsResponse> {
+  return request(`/user/keywords?user_id=${userId}`)
+}
+
+export function addCustomKeyword(
+  userId: number,
+  keyword: string,
+): Promise<CustomKeywordUpsert> {
+  return request('/user/keywords', {
+    method: 'POST',
+    body: JSON.stringify({ user_id: userId, keyword }),
+  })
+}
+
+export function deleteCustomKeyword(
+  id: number,
+  userId: number,
+): Promise<{ ok: boolean }> {
+  return request(`/user/keywords/${id}?user_id=${userId}`, { method: 'DELETE' })
+}
+
+/**
+ * 驱动 Scrapling 爬虫按关键词抓 GitHub 真实仓库 → 入库 → 直接入队。
+ * keywords 留空 = 使用画像面板保存的自定义关键词。
+ * 抓取 + 入库在前台完成（README 后台补齐），超时给足 90s。
+ */
+export function crawlByKeywords(
+  userId: number,
+  keywords?: string[],
+): Promise<CrawlResult> {
+  return request(
+    '/queue/crawl',
+    {
+      method: 'POST',
+      body: JSON.stringify({ user_id: userId, keywords: keywords ?? [] }),
+    },
+    90_000,
+  )
+}
+
 // ------------------------------------------------------------------ 互动
 
 export function likeRepo(repoId: number, userId: number): Promise<unknown> {
@@ -189,6 +245,39 @@ export function getComments(repoId: number): Promise<unknown> {
   return request(`/repos/${repoId}/comments`)
 }
 
+// ------------------------------------------------------------------ 翻译
+
+/**
+ * 翻译仓库简介 + README 为中文。
+ * ⚠️ LLM 调用偏慢（免费档推理 10~40s），超时给到 100s，
+ *    且缓存命中时是瞬时返回，不影响日常体验。
+ */
+export function translateRepo(repoId: number): Promise<TranslateResponse> {
+  return request<TranslateResponse>(
+    `/repos/${repoId}/translate`,
+    { method: 'POST' },
+    100_000,
+  )
+}
+
+export function getTranslateStatus(): Promise<TranslateStatus> {
+  return request<TranslateStatus>('/translate/status')
+}
+
+/**
+ * 批量拉取 feed 卡片描述的中文译文。
+ * 整批合并 1 次 LLM 调用；预热命中时秒回。超时给足 100s（未预热时需现场翻译）。
+ */
+export function translateBatch(
+  repoIds: number[],
+): Promise<BatchTranslateResponse> {
+  return request<BatchTranslateResponse>(
+    '/translate/batch',
+    { method: 'POST', body: JSON.stringify({ repo_ids: repoIds }) },
+    100_000,
+  )
+}
+
 export function postComment(
   repoId: number,
   userId: number,
@@ -198,4 +287,38 @@ export function postComment(
     method: 'POST',
     body: JSON.stringify({ user_id: userId, body }),
   })
+}
+
+// ------------------------------------------------------------------ GitHub 登录 & 实证圈
+
+export function getAuthStatus(): Promise<AuthStatus> {
+  return request<AuthStatus>('/auth/status')
+}
+
+/** OAuth 登录入口：整页跳转到后端，由后端 302 到 GitHub。 */
+export function githubLoginUrl(): string {
+  return `${BASE}/auth/github/login`
+}
+
+/** 令牌登录（不用建 OAuth App；PAT 需含 read:user + public_repo 权限）。 */
+export function loginWithPat(
+  token: string,
+): Promise<{ token: string; user: SessionUser }> {
+  return request('/auth/github/pat', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  }, 40_000)
+}
+
+export function getMe(): Promise<MeResponse> {
+  return request<MeResponse>('/auth/me')
+}
+
+/** 同步用户的自建仓库 + 点星仓库（权重按规则计算）并重建画像。 */
+export function syncGithub(): Promise<SyncResult> {
+  return request<SyncResult>('/auth/sync', { method: 'POST' }, 90_000)
+}
+
+export function logout(): Promise<unknown> {
+  return request('/auth/logout', { method: 'POST' })
 }

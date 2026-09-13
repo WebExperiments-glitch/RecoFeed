@@ -1,17 +1,34 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FC } from 'react'
-import type { FeedItem, FeedMeta } from '@/types/api'
-import { dislikeRepo, getFeed } from '@/lib/api'
+import type { FeedItem, FeedMeta, SessionUser } from '@/types/api'
+import { dislikeRepo, getFeed, getMe, logout, syncGithub } from '@/lib/api'
 import { flush, setEventUser } from '@/lib/events'
+import {
+  clearToken,
+  consumeAuthFromUrl,
+  getCachedUser,
+  getToken,
+  isGuest,
+  setCachedUser,
+  setGuest,
+  setToken,
+} from '@/lib/session'
 import FeedList from '@/components/FeedList'
 import TopBar from '@/components/TopBar'
 import SearchPanel from '@/components/SearchPanel'
 import DetailSheet from '@/components/DetailSheet'
 import ProfilePanel from '@/components/ProfilePanel'
+import LoginGate from '@/components/LoginGate'
 import ToastHost, { toast } from '@/components/Toast'
 
-/** 当前用户。真实项目里应来自登录态，这里先用固定值（后端默认 user_id=1）。 */
-const USER_ID = 1
+/** 游客模式对应的后端用户（数据库里的 demo 用户） */
+const GUEST_USER: SessionUser = {
+  user_id: 1,
+  username: 'demo',
+  github_login: null,
+  display_name: '演示用户',
+  avatar_url: null,
+}
 /** 每次从队列取多少条 */
 const PAGE_SIZE = 10
 /** 前端本地保留的最大卡片数（避免长时间刷内存无限增长） */
@@ -22,6 +39,11 @@ const App: FC = () => {
   const [meta, setMeta] = useState<FeedMeta | null>(null)
   const [loading, setLoading] = useState(true)
   const [fatal, setFatal] = useState<string | null>(null)
+
+  // ── 登录态 ──
+  const [user, setUser] = useState<SessionUser | null>(null)
+  const [authReady, setAuthReady] = useState(false)
+  const userId = user?.user_id ?? 1
 
   const [showSearch, setShowSearch] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
@@ -35,7 +57,7 @@ const App: FC = () => {
     fetchingRef.current = true
     setLoading(true)
     try {
-      const res = await getFeed(USER_ID, PAGE_SIZE)
+      const res = await getFeed(userId, PAGE_SIZE)
       if (res.items.length === 0 && replace) {
         setFatal('后端没有返回内容，请确认服务已启动且数据库已灌入种子数据')
       } else {
@@ -55,16 +77,65 @@ const App: FC = () => {
       setLoading(false)
       fetchingRef.current = false
     }
-  }, [])
+  }, [userId])
 
+  // ── 同步 GitHub 实证数据（自建仓库 + 点星仓库）──
+  const runSync = useCallback(async (): Promise<void> => {
+    toast('正在读取你的 GitHub 仓库与点星…', 'info')
+    try {
+      const r = await syncGithub()
+      toast(`已同步：自建 ${r.owned} 个 / 点星 ${r.starred} 个，画像已重建`, 'ok')
+      void loadPage(true)
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '同步失败', 'warn')
+    }
+  }, [loadPage])
+
+  // ── 登录态初始化（含 OAuth 回调处理）──
   useEffect(() => {
-    setEventUser(USER_ID)
+    const { token, error, needSync } = consumeAuthFromUrl()
+    if (token) {
+      setToken(token)
+      setGuest(false)
+    }
+    if (error) toast(`GitHub 登录失败：${error}`, 'warn')
+
+    const boot = async (): Promise<void> => {
+      if (getToken()) {
+        try {
+          const me = await getMe()
+          setCachedUser(me)
+          setUser(me)
+          setAuthReady(true)
+          if (needSync) void runSync()
+          return
+        } catch {
+          // 会话过期 / 数据库被重置：退回登录页
+          clearToken()
+          setCachedUser(null)
+        }
+      }
+      if (isGuest()) {
+        setCachedUser(GUEST_USER)
+        setUser(GUEST_USER)
+      } else {
+        const cached = getCachedUser()
+        if (cached) setUser(cached) // 先乐观渲染
+      }
+      setAuthReady(true)
+    }
+    void boot()
+  }, [runSync])
+
+  // ── 拿到用户后拉 Feed ──
+  useEffect(() => {
+    if (!authReady || !user) return
+    setEventUser(user.user_id)
     void loadPage(true)
-    // 页面卸载前把残留事件发出去
     return () => {
       void flush()
     }
-  }, [loadPage])
+  }, [authReady, user, loadPage])
 
   // ── 滑到底部继续加载 ──
   const onReachEnd = useCallback((): void => {
@@ -77,10 +148,25 @@ const App: FC = () => {
     setItems((prev) => prev.filter((x) => x.repo_id !== item.repo_id))
     toast(`已减少「${item.name}」这类推荐`, 'ok')
     try {
-      await dislikeRepo(item.repo_id, USER_ID, 'category')
+      await dislikeRepo(item.repo_id, userId, 'category')
     } catch {
       toast('操作没提交成功，稍后会重试', 'warn')
     }
+  }, [userId])
+
+  // ── 退出登录 ──
+  const handleLogout = useCallback(async (): Promise<void> => {
+    try {
+      await logout()
+    } catch {
+      /* 网络失败也照常清本地 */
+    }
+    clearToken()
+    setCachedUser(null)
+    setGuest(false)
+    setUser(null)
+    setShowProfile(false)
+    toast('已退出登录', 'ok')
   }, [])
 
   // ── 键盘操作（桌面端体验）──
@@ -104,17 +190,39 @@ const App: FC = () => {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
+  // ── 启动中：极简闪屏，避免先闪一下登录页 ──
+  if (!authReady) {
+    return (
+      <div className="h-full w-full bg-parchment flex items-center justify-center">
+        <span className="text-[13px] text-ink-faint animate-pulse">RecoFeed</span>
+      </div>
+    )
+  }
+
+  // ── 未登录且非游客 → 登录页 ──
+  if (!user) {
+    return (
+      <div className="h-full w-full bg-parchment overflow-hidden">
+        <LoginGate
+          onLoggedIn={(u) => setUser(u)}
+          onNeedSync={() => void runSync()}
+        />
+        <ToastHost />
+      </div>
+    )
+  }
+
   if (fatal) {
     return (
-      <div className="h-full w-full flex flex-col items-center justify-center px-8 text-center">
+      <div className="h-full w-full flex flex-col items-center justify-center px-8 text-center bg-parchment">
         <div className="text-4xl mb-4">🛰️</div>
-        <h1 className="text-[16px] font-semibold text-white/85">
+        <h1 className="text-[17px] font-semibold text-ink tracking-[-0.22px]">
           连不上推荐服务
         </h1>
-        <p className="text-[12.5px] text-white/45 mt-2 leading-relaxed max-w-xs">
+        <p className="text-[12.5px] text-ink-muted mt-2 leading-relaxed max-w-xs">
           {fatal}
         </p>
-        <pre className="glass-soft rounded-xl px-4 py-3 mt-5 text-[11px] text-white/50 text-left leading-relaxed">
+        <pre className="bg-canvas border border-hairline rounded-util px-4 py-3 mt-5 text-[11px] text-ink-soft text-left leading-relaxed font-mono">
 {`cd backend
 python3 jobs/seed_data.py --reset
 python3 app.py`}
@@ -133,22 +241,13 @@ python3 app.py`}
   }
 
   return (
-    <div className="relative h-full w-full bg-ink-900 overflow-hidden">
-      {/* 氛围光 —— 让纯黑背景不那么死 */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -top-32 -left-24 h-72 w-72 rounded-full opacity-[0.16] blur-3xl"
-        style={{ background: 'radial-gradient(circle, #3b82f6, transparent 70%)' }}
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -bottom-32 -right-20 h-72 w-72 rounded-full opacity-[0.12] blur-3xl"
-        style={{ background: 'radial-gradient(circle, #f5b942, transparent 70%)' }}
-      />
-
+    // 羊皮纸底座：卡片自己画白/羊皮纸交替瓦片，
+    // 颜色差本身就是分隔线 —— 不加边框、不加阴影。
+    <div className="relative h-full w-full bg-parchment overflow-hidden">
       <TopBar
         queueSize={meta?.queue_size ?? 0}
         source={meta?.source ?? 'queue'}
+        user={user}
         onOpenSearch={() => setShowSearch(true)}
         onOpenProfile={() => setShowProfile(true)}
       />
@@ -157,28 +256,31 @@ python3 app.py`}
         items={items}
         meta={meta}
         loading={loading}
-        userId={USER_ID}
+        userId={userId}
         onOpenDetail={(it) => setDetailId(it.repo_id)}
         onDislike={(it) => void onDislike(it)}
         onReachEnd={onReachEnd}
       />
 
       <SearchPanel
-        userId={USER_ID}
+        userId={userId}
         open={showSearch}
         onClose={() => setShowSearch(false)}
         onOpenDetail={(it) => setDetailId(it.repo_id)}
       />
 
       <ProfilePanel
-        userId={USER_ID}
+        userId={userId}
+        user={user}
         open={showProfile}
         onClose={() => setShowProfile(false)}
+        onSync={() => void runSync()}
+        onLogout={() => void handleLogout()}
       />
 
       <DetailSheet
         repoId={detailId}
-        userId={USER_ID}
+        userId={userId}
         onClose={() => setDetailId(null)}
       />
 

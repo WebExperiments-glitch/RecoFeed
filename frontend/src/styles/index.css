@@ -4,7 +4,7 @@
 
 @layer base {
   :root {
-    color-scheme: dark;
+    color-scheme: light;
   }
 
   html,
@@ -16,11 +16,16 @@
   }
 
   body {
-    @apply bg-ink-900 text-white/90 font-sans antialiased;
+    @apply bg-parchment text-ink font-sans antialiased;
     /* 抖音式全屏滑动：禁止页面级滚动，滚动交给卡片内部 */
     overflow: hidden;
     overscroll-behavior: none;
     -webkit-tap-highlight-color: transparent;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: rgba(0, 102, 204, 0.16);
   }
 
   /* 隐藏滚动条但保留滚动能力 */
@@ -29,7 +34,7 @@
     height: 4px;
   }
   ::-webkit-scrollbar-thumb {
-    @apply bg-white/15 rounded-full;
+    @apply bg-ink/20 rounded-full;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
@@ -45,45 +50,55 @@
 }
 
 @layer components {
-  /* 毛玻璃容器 —— 本项目的基础视觉单元 */
+  /* 磨砂导航条 —— sub-nav-frosted：parchment 80% + backdrop blur。
+     悬浮感来自磨砂，不来自阴影。 */
   .glass {
-    @apply bg-ink-700/60 backdrop-blur-glass border border-white/10 shadow-glass;
+    @apply bg-parchment/80 backdrop-blur-glass border-b border-hairline/70;
   }
 
+  /* 轻磨砂（浮层里的次级容器） */
   .glass-soft {
-    @apply bg-white/[0.04] backdrop-blur-glass border border-white/[0.08];
+    @apply bg-white/70 backdrop-blur-glass border border-white/70;
   }
 
-  /* 主按钮 */
+  /* 白色工具卡 —— store-utility-card：
+     白底 + 1px 发丝线 + 18px 圆角，无阴影（Apple 卡片纪律）。 */
+  .card {
+    @apply bg-canvas border border-hairline rounded-card;
+  }
+
+  /* 按钮语法一：蓝色胶囊 CTA。
+     rounded.pill 本身就是品牌的「动作信号」。 */
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-full px-4 py-2
-           text-sm font-medium transition-all duration-200
+           text-[14px] leading-none transition-all duration-200
            active:scale-95 disabled:opacity-40 disabled:pointer-events-none;
   }
   .btn-primary {
-    @apply btn bg-accent text-white hover:bg-accent-glow;
+    @apply btn bg-accent text-white hover:bg-accent-focus;
   }
+  /* 按钮语法二：幽灵胶囊（描边 + 蓝字），两个 CTA 并排时的次动作 */
   .btn-ghost {
-    @apply btn bg-white/[0.06] text-white/80 border border-white/10
-           hover:bg-white/[0.12] hover:text-white;
+    @apply btn bg-canvas text-accent border border-accent hover:bg-accent/[0.06];
   }
+  /* 遗珠语义按钮（金色只给非交互的品牌符号与收藏态） */
   .btn-gem {
-    @apply btn bg-gem/15 text-gem border border-gem/40 hover:bg-gem/25;
+    @apply btn bg-gem/[0.08] text-gem border border-gem/30 hover:bg-gem/[0.16];
   }
 
   /* 标签胶囊 */
   .chip {
     @apply inline-flex items-center rounded-full px-2.5 py-1
-           text-[11px] font-medium leading-none whitespace-nowrap;
+           text-[11px] leading-none whitespace-nowrap;
   }
 
-  /* 骨架屏的流光效果 */
+  /* 骨架屏的流光效果（浅色版） */
   .skeleton {
     background: linear-gradient(
       90deg,
-      rgba(255, 255, 255, 0.04) 25%,
-      rgba(255, 255, 255, 0.09) 50%,
-      rgba(255, 255, 255, 0.04) 75%
+      rgba(0, 0, 0, 0.045) 25%,
+      rgba(0, 0, 0, 0.085) 50%,
+      rgba(0, 0, 0, 0.045) 75%
     );
     background-size: 200% 100%;
     @apply animate-shimmer rounded;
@@ -119,11 +134,5 @@
   .snap-card {
     scroll-snap-align: start;
     scroll-snap-stop: always;
-  }
-
-  /* 文字渐变（品牌标题用） */
-  .text-gradient {
-    @apply bg-clip-text text-transparent;
-    background-image: linear-gradient(120deg, #60a5fa, #a78bfa 55%, #f5b942);
   }
 }
