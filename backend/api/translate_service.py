@@ -241,6 +241,29 @@ def _english_ratio(text: str) -> float:
     return letters / total
 
 
+def _is_real_translation(zh: str | None, src: str | None) -> bool:
+    """判断"译文"是否真的是中文译文。
+
+    ⚠️ 实测踩坑：免费模型偶尔**原样回吐原文**（ipazc/mtcnn 的简介被"翻译"成
+       同一句英文），而下游把它当译文渲染 → 卡片上同一句话出现两遍
+       （一行"译文"、一行原文）。所以译文必须过这道门：
+         ① 不能与原文相同（忽略大小写/空白）
+         ② 必须真的有汉字（≥4 个且占比 ≥15%）
+    """
+    if not zh or not src:
+        return False
+    a = zh.strip()
+    b = src.strip()
+    if not a:
+        return False
+    if a.lower() == b.lower():
+        return False
+    if a.lower().replace(" ", "") == b.lower().replace(" ", ""):
+        return False
+    cjk = sum(1 for c in a if "\u4e00" <= c <= "\u9fff")
+    return cjk >= max(4, int(len(a) * 0.15))
+
+
 def _build_source(row) -> dict[str, str]:
     """取仓库原文并按上限截断。"""
     desc = (row["description"] or "").strip()
@@ -474,8 +497,13 @@ def translate_repo(conn, repo_id: int) -> dict[str, Any]:
     try:
         _check_rate_limit(conn)
         zh_desc, zh_readme, used_model = _translate_via_models(llm_src)
-        if not zh_desc:
-            zh_desc = pre_desc
+        # ⚠️ 这里以前是「翻译失败就退回原文（pre_desc）」—— 那会让前端把同一句话
+        #    渲染两遍（一行当译文、一行当原文）。现在：校验不过就留空，
+        #    前端只显示一次原文 + "翻译生成中"提示。
+        if not _is_real_translation(zh_desc, src.get("desc")):
+            zh_desc = None
+        if zh_readme and not _is_real_translation(zh_readme, src.get("readme")):
+            zh_readme = None
 
         conn.execute(
             """INSERT INTO translations
@@ -721,12 +749,18 @@ def _translate_descriptions_inner(
             item = zh_map.get(idx) or {}
             zh_name = (item.get("zh_name") or "").strip() or None
             zh_desc = (item.get("zh_description") or "").strip() or None
-            # ⭐ 质量门禁：译文明显比原文长很多（≥2.5 倍）说明模型把解释
+            # ⭐ 质量门禁 ①：译文明显比原文长很多（≥2.5 倍）说明模型把解释
             #    文本混进了译文，不可信 → 不写缓存、返回 None（下次重试）。
             if zh_desc and len(zh_desc) > max(120, len(desc) * 2.5):
                 log.warning("描述译文可疑（%d 字 vs 原文 %d 字），丢弃重试",
                             len(zh_desc), len(desc))
                 zh_desc = None
+            # ⭐ 质量门禁 ②：原样回吐原文 / 没有汉字 → 不算译文（否则界面重复渲染）
+            if zh_desc and not _is_real_translation(zh_desc, desc):
+                log.info("描述译文与原文相同或非中文，丢弃重试：%s", _name)
+                zh_desc = None
+            if zh_name and not _is_real_translation(zh_name, _name):
+                zh_name = None
             result[rid] = {"zh_name": zh_name, "zh_description": zh_desc}
             if zh_desc or zh_name:
                 conn.execute(

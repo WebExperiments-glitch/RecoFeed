@@ -5,7 +5,6 @@ import {
   formatStars,
   hashHue,
   isForgotten,
-  langColor,
   licenseBadge,
   timeAgo,
 } from '@/lib/format'
@@ -90,6 +89,38 @@ const FeedCard: FC<Props> = ({
     [item.tags],
   )
 
+  /** 真正的译文：与原文相同（模型回吐原文）就当没有译文，避免同一句话渲染两遍 */
+  const descEn = (item.description ?? '').trim()
+  /** 原文本身已经是中文 → 不需要翻译，也不该显示"翻译生成中" */
+  const descAlreadyChinese = useMemo(() => {
+    if (!descEn) return false
+    const cjk = (descEn.match(/[\u4e00-\u9fff]/g) ?? []).length
+    return cjk >= 4 && cjk >= descEn.length * 0.15
+  }, [descEn])
+  const zhDescReal = useMemo(() => {
+    const z = (zhDesc ?? '').trim()
+    if (!z) return ''
+    const norm = (s: string) => s.toLowerCase().replace(/\s+/g, '')
+    if (norm(z) === norm(descEn)) return ''
+    const cjk = (z.match(/[\u4e00-\u9fff]/g) ?? []).length
+    return cjk >= 4 ? z : ''
+  }, [zhDesc, descEn])
+
+  /** 话题去重：与算法标签重复（含互为子串，如 detection/detect）的 topics 全部丢掉 */
+  const cleanTopics = useMemo(() => {
+    const tagLows = topTags.map((t) => t.tag.toLowerCase())
+    return item.topics
+      .filter((tp) => {
+        const tl = tp.toLowerCase()
+        if (tagLows.includes(tl)) return false
+        return !tagLows.some(
+          (x) =>
+            x.length >= 4 && tl.length >= 4 && (x.includes(tl) || tl.includes(x)),
+        )
+      })
+      .slice(0, 4)
+  }, [item.topics, topTags])
+
   useEffect(() => {
     onRegisterEl?.(index, rootRef.current)
     return () => onRegisterEl?.(index, null)
@@ -164,22 +195,25 @@ const FeedCard: FC<Props> = ({
           任何一处在窄屏下算出超宽都会把整页撑出横向滚动条，
           表现为"右侧内容被裁掉"。 */}
       <div className="h-full w-full px-4 pt-14 pb-4 flex flex-col overflow-hidden">
-        {/* ── 内容区：整块垂直居中 ──
-             布局纪律（踩过的坑）：
-               ❌ 之前把「身份+理由」留在上面、只把正文区居中 →
-                  理由胶囊被孤立在顶部，正文飘在中间，两处空洞把相关的内容硬生生拆开，
-                  读起来是"字隔得很远"而不是呼吸感。
-               ✅ 现在：内容块**顶对齐**紧接着顶栏往下排（相关元素零距离相邻），
-                  指标与操作固定在底部 —— 于是整张卡只有**一处**留白，
-                  且落在页脚上方（眼里是"卡片还剩的空间"，不是"字被拆开"）。
-                  居中尝试过，会让内容看起来浮在半空，反而更像版面出错。 */}
+        {/* ── 内容区：整块垂直居中 + 限宽 ──
+             布局纪律（踩了三轮坑）：
+               ❌ 只把正文区居中，「身份+理由」留在顶部 → 理由胶囊被孤立，两处空洞拆开内容
+               ❌ 内容顶对齐 + 指标/操作钉在底部 → 内容与页脚之间出现"太平洋留白"
+                  （尤其桌面矮宽窗口，1080×600 下一个空洞四五百像素）
+               ✅ 现在：**所有内容（身份→理由→描述→摘要→标签→信息行→操作行）
+                  作为一个整体**居中；间距统一 14px；内容限宽 560px 居中。
+                  用 m-auto 而不是 justify-center：内容超高时 auto margin 归零，
+                  顶部不会被裁（justify-center + overflow 会吃掉第一行）。 */}
         <div
           ref={scrollRef}
           onScroll={onScroll}
           className="flex-1 min-h-0 overflow-y-auto pr-1"
         >
           <div className="min-h-full flex flex-col">
-            <div className="w-full flex flex-col gap-3 pt-1">
+            <div className="m-auto w-full max-w-[560px] flex flex-col gap-3.5">
+              {/* ↑ max-w-[560px]：桌面端收窄内容区居中。
+                  1080px 宽的行长会让眼睛频繁换行、阅读体验崩掉；
+                  560px ≈ 中文 40 字/行。移动端 390px 不受影响。 */}
               {/* ── 仓库身份 ── */}
               <div className="flex items-start gap-3">
                 <div
@@ -238,10 +272,12 @@ const FeedCard: FC<Props> = ({
 
             {item.description && (
               <div>
-                {zhDesc ? (
+                {/* ⚠️ 只有"真译文"才单独占一行；否则原文只显示一次。
+                    后端也已加校验（模型回吐原文时返回空），这里是前端兜底。 */}
+                {zhDescReal ? (
                   <>
                     <p className="text-[15px] leading-[1.55] text-ink">
-                      {zhDesc}
+                      {zhDescReal}
                     </p>
                     <p className="text-[11.5px] leading-relaxed text-ink-faint mt-1">
                       {item.description}
@@ -252,9 +288,11 @@ const FeedCard: FC<Props> = ({
                     <p className="text-[15px] leading-[1.55] text-ink-soft">
                       {item.description}
                     </p>
-                    <span className="text-[10.5px] text-ink-faint mt-1 inline-block animate-pulse">
-                      中文翻译生成中…
-                    </span>
+                    {!descAlreadyChinese && (
+                      <span className="text-[10.5px] text-ink-faint mt-1 inline-block animate-pulse">
+                        中文翻译生成中…
+                      </span>
+                    )}
                   </>
                 )}
               </div>
@@ -287,10 +325,11 @@ const FeedCard: FC<Props> = ({
               </div>
             )}
 
-            {/* topics —— 收敛到 4 个，弱化处理，避免和 tag 抢视觉 */}
-            {item.topics.length > 0 && (
+            {/* topics —— 与算法标签去重后最多 4 个
+                （之前 detection/face/mtcnn 在标签行和话题行各出现一次）*/}
+            {cleanTopics.length > 0 && (
               <div className="flex flex-wrap gap-x-2.5 gap-y-1">
-                {item.topics.slice(0, 4).map((t) => (
+                {cleanTopics.map((t) => (
                   <span key={t} className="text-[11px] text-ink-faint">
                     #{t}
                   </span>
@@ -298,69 +337,71 @@ const FeedCard: FC<Props> = ({
               </div>
             )}
 
-            {/* 许可证 */}
-            {lic && (
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className={`chip border ${lic.cls}`}>{lic.text}</span>
-                {item.license_risk === 'caution' && (
-                  <span className="text-[11px] text-risk-caution">
-                    商用需留意条款
-                  </span>
-                )}
-                {item.license_risk === 'danger' && (
-                  <span className="text-[11px] text-risk-danger">
-                    协议限制较强
-                  </span>
-                )}
-              </div>
-            )}
+            {/* ── 紧凑信息行：⭐星数 · 语言 · 🎯匹配度 · 许可证 ──
+                 之前是三个大矩形"地砖"占满一整行，还压不住版面；
+                 改一行小胶囊，把空间留给内容。 */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="chip h-6 bg-pearl text-ink-muted border border-hairline">
+                ⭐ {formatStars(item.stars)}
+              </span>
+              {lang && (
+                <span className="chip h-6 bg-pearl text-ink-muted border border-hairline">
+                  📓 {lang}
+                </span>
+              )}
+              <span className="chip h-6 bg-pearl text-ink-muted border border-hairline">
+                🎯 {item.score.toFixed(2)}
+              </span>
+              {lic && (
+                <span className={`chip h-6 border ${lic.cls}`}>{lic.text}</span>
+              )}
+              {item.license_risk === 'caution' && (
+                <span className="text-[10.5px] text-risk-caution">商用需留意</span>
+              )}
+              {item.license_risk === 'danger' && (
+                <span className="text-[10.5px] text-risk-danger">协议受限</span>
+              )}
+            </div>
+
+            {/* ── 操作行：紧凑 pill + 圆形按钮，同一行，不占整宽 ──
+                 刷卡的主线动作是"上下滑"，全宽蓝条会把视线硬拽下去；
+                 缩成一行、次级操作靠右，主动权还给用户。 */}
+            <div className="flex items-center gap-2 pt-3 border-t border-divider">
+              <button
+                className="btn-primary h-9 px-4 text-[13px]"
+                onClick={() => onOpenDetail(item)}
+              >
+                查看详情 ›
+              </button>
+              <div className="flex-1" />
+              <button
+                className={`h-9 w-9 shrink-0 rounded-full flex items-center justify-center
+                           border transition-colors active:scale-95 ${
+                             liked
+                               ? 'bg-accent/[0.08] border-accent/30'
+                               : 'bg-pearl border-hairline hover:bg-parchment'
+                           }`}
+                onClick={() => void toggleLike()}
+                title={liked ? '取消点赞' : '点赞'}
+                aria-label={liked ? '取消点赞' : '点赞'}
+              >
+                {liked ? '💙' : '🤍'}
+              </button>
+              <button
+                className="h-9 w-9 shrink-0 rounded-full flex items-center justify-center
+                           bg-pearl border border-hairline text-ink-muted
+                           hover:text-risk-danger transition-colors active:scale-95"
+                onClick={() => onDislike(item)}
+                title="不感兴趣"
+                aria-label="不感兴趣"
+              >
+                <BanIcon />
+              </button>
+            </div>
             </div>
           </div>
         </div>
 
-        {/* ── 指标栏（白色工具卡 + 发丝线，无阴影）── */}
-        <div className="mt-4 pt-4 border-t border-divider grid grid-cols-3 gap-2 min-w-0">
-          <Metric label="Star" value={formatStars(item.stars)} />
-          <Metric
-            label="语言"
-            value={lang ?? '—'}
-            dot={lang ? langColor(lang) : undefined}
-          />
-          <Metric label="匹配度" value={item.score.toFixed(2)} />
-        </div>
-
-        {/* ── 操作栏：蓝胶囊主 CTA + 圆形图标钮（44px 触控目标）── */}
-        <div className="mt-3 flex items-center gap-2 safe-b">
-          <button
-            className="btn-primary flex-1 min-w-0"
-            onClick={() => onOpenDetail(item)}
-          >
-            查看详情
-          </button>
-          <button
-            className={`h-11 w-11 shrink-0 rounded-full flex items-center justify-center
-                       border transition-colors active:scale-95 ${
-                         liked
-                           ? 'bg-accent/[0.08] border-accent/30'
-                           : 'bg-pearl border-hairline hover:bg-parchment'
-                       }`}
-            onClick={() => void toggleLike()}
-            title={liked ? '取消点赞' : '点赞'}
-            aria-label={liked ? '取消点赞' : '点赞'}
-          >
-            {liked ? '💙' : '🤍'}
-          </button>
-          <button
-            className="h-11 w-11 shrink-0 rounded-full flex items-center justify-center
-                       bg-pearl border border-hairline text-ink-muted
-                       hover:text-risk-danger transition-colors active:scale-95"
-            onClick={() => onDislike(item)}
-            title="不感兴趣"
-            aria-label="不感兴趣"
-          >
-            <BanIcon />
-          </button>
-        </div>
       </div>
     </section>
   )
@@ -379,29 +420,6 @@ const BanIcon: FC = () => (
     <circle cx="12" cy="12" r="9" />
     <path d="m5.6 5.6 12.8 12.8" />
   </svg>
-)
-
-const Metric: FC<{ label: string; value: string; dot?: string }> = ({
-  label,
-  value,
-  dot,
-}) => (
-  <div className="bg-canvas border border-hairline rounded-pearl px-2 py-3 text-center min-w-0">
-    <div className="flex items-center justify-center gap-1.5 min-w-0">
-      {dot && (
-        <span
-          className="h-2 w-2 rounded-full shrink-0"
-          style={{ background: dot }}
-        />
-      )}
-      <span className="text-[15px] font-semibold text-ink leading-none truncate tracking-[-0.2px]">
-        {value}
-      </span>
-    </div>
-    <div className="text-[10px] text-ink-faint mt-1.5 leading-none">
-      {label}
-    </div>
-  </div>
 )
 
 export default memo(FeedCard)
