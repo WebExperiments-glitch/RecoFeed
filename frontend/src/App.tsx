@@ -50,6 +50,10 @@ const App: FC = () => {
   const [detailId, setDetailId] = useState<number | null>(null)
 
   const fetchingRef = useRef(false)
+  /** 首屏加载失败的重试计数（后端瞬时抖动不该直接甩一屏报错） */
+  const bootRetryRef = useRef(0)
+  /** 首屏最多自动重试几次 */
+  const BOOT_RETRY_MAX = 3
 
   // ── 拉取一页 ──
   const loadPage = useCallback(async (replace = false): Promise<void> => {
@@ -62,6 +66,7 @@ const App: FC = () => {
         setFatal('后端没有返回内容，请确认服务已启动且数据库已灌入种子数据')
       } else {
         setFatal(null)
+        bootRetryRef.current = 0
       }
       setItems((prev) => {
         const next = replace ? res.items : [...prev, ...res.items]
@@ -71,13 +76,34 @@ const App: FC = () => {
       setMeta(res.meta)
     } catch (e) {
       const msg = e instanceof Error ? e.message : '加载失败'
-      if (replace) setFatal(msg)
-      else toast(msg, 'warn')
+      // ⭐ 首屏失败先自动重试：实测后端偶发 500（SQLite 写锁）或正在重启时，
+      //    直接甩"连不上推荐服务"太粗暴 —— 退避重试 3 次再认输。
+      if (replace && bootRetryRef.current < BOOT_RETRY_MAX) {
+        bootRetryRef.current += 1
+        const delay = 1200 * bootRetryRef.current
+        setTimeout(() => {
+          fetchingRef.current = false
+          void loadPage(true)
+        }, delay)
+      } else if (replace) {
+        setFatal(msg)
+      } else {
+        toast(msg, 'warn')
+      }
     } finally {
       setLoading(false)
       fetchingRef.current = false
     }
   }, [userId])
+
+  // ── 报错页自动重试：后端起来了就自动恢复，不用用户点 ──
+  useEffect(() => {
+    if (!fatal) return
+    const t = setInterval(() => {
+      if (!fetchingRef.current) void loadPage(true)
+    }, 10_000)
+    return () => clearInterval(t)
+  }, [fatal, loadPage])
 
   // ── 同步 GitHub 实证数据（自建仓库 + 点星仓库）──
   const runSync = useCallback(async (): Promise<void> => {
