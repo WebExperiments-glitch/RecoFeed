@@ -273,6 +273,10 @@ _GENERIC_TAGS: set[str] = {
 def build_fetch_plan(conn: sqlite3.Connection, user_id: int,
                      *, queue_size: int = 0) -> FetchPlan:
     """根据用户画像与行为指标，生成这次补货该抓什么。"""
+    # ⚠️ 必须在函数开头导入：写在函数中段会让 is_noise_tag 变成局部变量，
+    #    导致前面所有使用点抛 UnboundLocalError（踩过一次，直接 500）。
+    from tags.extractor import is_noise_tag
+
     plan = FetchPlan()
 
     # ── ⓪ 用户自定义关键词（画像面板维护）—— 最高优先级信号 ──
@@ -330,7 +334,7 @@ def build_fetch_plan(conn: sqlite3.Connection, user_id: int,
     merged: list[str] = []
     for t in conv_tags + domain_words + ordered:
         tl = str(t).lower()
-        if not tl or tl in merged or _is_generic(tl):
+        if not tl or tl in merged or _is_generic(tl) or is_noise_tag(tl):
             continue
         merged.append(tl)
 
@@ -342,6 +346,7 @@ def build_fetch_plan(conn: sqlite3.Connection, user_id: int,
         return plan
 
     # 优先级：用户自定义关键词 > GitHub 实证圈方向 > 画像/高转化标签
+    gh_queries = [q for q in gh_queries if not is_noise_tag(q)]   # 兜底：实证圈方向词
     plan.queries = (custom + gh_queries + merged)[:REFILL_MAX_QUERIES]
     plan.labels = ["high_conversion"] * min(len(conv_tags), REFILL_MAX_QUERIES)
     plan.domains = seen_domains[:5]

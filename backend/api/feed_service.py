@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import random
+import re
 import sqlite3
 import uuid
 
@@ -350,3 +351,51 @@ def explain(c: Candidate) -> str:
         parts.append("与你的兴趣高度重合")
 
     return "；".join(parts[:2]) if parts else "为你推荐"
+
+
+# ---------------------------------------------------------------- README 摘要
+
+_FENCE = re.compile(r"```[\s\S]*?```", re.MULTILINE)      # 代码块（整体删掉）
+_IMG = re.compile(r"!\[[^\]]*\]\([^)]*\)")              # 图片
+_LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")            # 链接 → 保留文字
+_HTML = re.compile(r"<[^>]{1,120}>")                       # 行内 HTML
+_URL = re.compile(r"https?://\S+")                         # 裸 URL
+_LINE_MARK = re.compile(r"^\s*(?:[#>\-\*+=|~]{1,}|\d+\.)\s*", re.MULTILINE)
+_SECTION_TITLE = re.compile(
+    r"^(?:install(?:ation)?|usage|getting started|quick ?start|license|contribut\w*|"
+    r"features?|requirements?|dependencies|screenshot\w*|demo|faq|changelog)\s*[:：]?\s*",
+    re.IGNORECASE)
+_BADGE_ONLY = re.compile(r"^[\s\W_]*$")
+
+
+def readme_excerpt(md: str | None, limit: int = 420) -> str:
+    """把 README 压成一段纯文本摘要（给 Feed 卡片用）。
+
+    为什么要它：满屏卡片如果只有两行字，版面会显得空；
+    带上 README 摘要后信息密度正常，用户也更容易判断要不要点进去。
+    """
+    if not md:
+        return ""
+    t = _FENCE.sub(" ", md)        # ⚠️ 必须先删代码块：
+    t = _IMG.sub(" ", t)           #    否则行首标记规则会把 ``` 吃掉、留下代码内容
+    t = _LINK.sub(r"\1", t)   # 保留链接文字，丢掉 URL
+    t = _HTML.sub(" ", t)
+    t = _URL.sub(" ", t)
+    t = _LINE_MARK.sub("", t)
+    t = re.sub(r"[*_`~]{1,}", "", t)          # 残留的行内强调符号
+    # 链接/图片被删掉后会留下 ", , , and ." 这类空标点残渣，收拾干净
+    t = re.sub(r"\s*,\s*(?=[,.;:)])", "", t)
+    t = re.sub(r"(?:\s*,\s*){2,}", ", ", t)
+    t = re.sub(r"\s+([,.;:])", r"", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    # 去掉开头的空段落 / 章节名（Install / Usage 这类对预览无意义）
+    while True:
+        before = t
+        t = _SECTION_TITLE.sub("", t).strip()
+        if t == before:
+            break
+    t = re.sub(r"(?:see|see also|read more|more info)\s*[:：]?\s*$", "", t,
+               flags=re.IGNORECASE).strip()
+    if _BADGE_ONLY.match(t):
+        return ""
+    return t[:limit]

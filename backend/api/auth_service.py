@@ -451,6 +451,7 @@ def load_footprint(conn: sqlite3.Connection, user_id: int) -> list[sqlite3.Row]:
 def footprint_preferred_queries(conn: sqlite3.Connection, user_id: int,
                                 limit: int = 5) -> list[str]:
     """实证圈 → 补货查询词（自建仓库的话题优先，其次点星）。"""
+    from tags.extractor import is_noise_tag
     rows = load_footprint(conn, user_id)
     if not rows:
         return []
@@ -465,6 +466,10 @@ def footprint_preferred_queries(conn: sqlite3.Connection, user_id: int,
                 topics = []
             for t in topics:
                 t = str(t).strip().lower()
+                # ⚠️ 必须过滤噪声：否则会拿 "support"/"install" 去 GitHub 搜，
+                #    白烧额度还污染语料库
+                if is_noise_tag(t):
+                    continue
                 if 2 < len(t) <= 30 and t not in out:
                     out.append(t)
                     if len(out) >= limit:

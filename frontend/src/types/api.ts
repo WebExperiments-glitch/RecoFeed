@@ -19,6 +19,8 @@ export interface FeedItem {
   owner: string
   name: string
   description: string | null
+  /** README 纯文本摘要（后端按 markdown 清洗过，约 420 字）——用于填充卡片版面 */
+  readme_excerpt?: string
   language: string | null
   stars: number
   topics: string[]
@@ -284,6 +286,34 @@ export interface SyncResult {
   owned_top: FootprintItem[]
   starred_top: FootprintItem[]
   footprint: FootprintSummary
+}
+
+// ------------------------------------------------------------------ LLM 洞察层
+
+/** 推荐理由批量结果（一页卡片合并 1 次 LLM 调用） */
+export interface ExplainResponse {
+  ok: boolean
+  /** repo_id → 一句话推荐理由 */
+  explanations: Record<string, string>
+  cached?: number
+  generated?: number
+  model?: string
+  reason?: string
+}
+
+/** LLM 画像归纳结果 */
+export interface ProfileInsight {
+  ok: boolean
+  /** 一句话技术画像 */
+  summary: string
+  /** LLM 提炼的精确技术方向 */
+  interests: string[]
+  /** LLM 判定为噪声的标签 */
+  noise: string[]
+  cached?: boolean
+  model?: string
+  created_at?: string
+  reason?: string
 }
 
 // ------------------------------------------------------------------ 事件

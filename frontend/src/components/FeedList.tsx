@@ -5,6 +5,7 @@ import FeedCard from '@/components/FeedCard'
 import CardSkeleton from '@/components/CardSkeleton'
 import { trackImpression } from '@/lib/events'
 import { translateBatch } from '@/lib/api'
+import { explainCards } from '@/lib/api'
 
 interface Props {
   items: FeedItem[]
@@ -51,7 +52,9 @@ const FeedList: FC<Props> = ({
   //    现在缺失/失败都走 8~10s 退避重试，最多 3 次；彻底失败才放行
   //    requestedRef，等下次 items 变化再补。
   const [zhMap, setZhMap] = useState<Record<number, CardTranslation>>({})
+  const [explainMap, setExplainMap] = useState<Record<number, string>>({})
   const requestedRef = useRef<Set<number>>(new Set())
+  const explainRequestedRef = useRef<Set<number>>(new Set())
   const mountedRef = useRef(true)
   useEffect(() => {
     mountedRef.current = true
@@ -59,6 +62,40 @@ const FeedList: FC<Props> = ({
       mountedRef.current = false
     }
   }, [])
+
+  /**
+   * 💡 LLM 推荐理由：一页 10 张合并成 1 次调用（后端按画像指纹缓存）。
+   *
+   * 为什么放在这里而不是 App：与翻译预热同构 —— 都是"渲染后再补齐"的可选增强，
+   * 失败就静默（LLM 限流/额度耗尽时绝不影响浏览）。
+   * 延迟 2.5s 发起，避免和首屏渲染抢资源。
+   */
+  useEffect(() => {
+    const ids = items
+      .slice(0, 10)
+      .map((it) => it.repo_id)
+      .filter((id) => !explainRequestedRef.current.has(id))
+    if (ids.length === 0) return
+    ids.forEach((id) => explainRequestedRef.current.add(id))
+
+    const timer = window.setTimeout(() => {
+      explainCards(userId, ids)
+        .then((res) => {
+          if (!mountedRef.current || !res.explanations) return
+          const patch: Record<number, string> = {}
+          for (const [k, v] of Object.entries(res.explanations)) {
+            patch[Number(k)] = v
+          }
+          if (Object.keys(patch).length > 0) {
+            setExplainMap((prev) => ({ ...prev, ...patch }))
+          }
+        })
+        .catch(() => {
+          /* 静默：LLM 不可用不影响浏览 */
+        })
+    }, 2500)
+    return () => window.clearTimeout(timer)
+  }, [items, userId])
 
   const runZh = useCallback((ids: number[], attempt: number): void => {
     translateBatch(ids)
@@ -201,6 +238,7 @@ const FeedList: FC<Props> = ({
           userId={userId}
           isActive={i === activeIndex}
           zh={zhMap[item.repo_id]}
+          explanation={explainMap[item.repo_id]}
           onOpenDetail={onOpenDetail}
           onDislike={onDislike}
           onRegisterEl={registerEl}

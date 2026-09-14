@@ -3,6 +3,7 @@ import type { FC } from 'react'
 import type {
   CustomKeyword,
   MeResponse,
+  ProfileInsight,
   ProfileItem,
   QueueStats,
   SessionUser,
@@ -14,10 +15,12 @@ import {
   deleteCustomKeyword,
   getCustomKeywords,
   getMe,
+  getProfileSummary,
   getQueueStats,
   getUserProfile,
   githubLoginUrl,
   rebuildUserProfile,
+  summarizeProfile,
 } from '@/lib/api'
 import { getToken } from '@/lib/session'
 import { formatStars, timeAgo } from '@/lib/format'
@@ -56,6 +59,9 @@ const ProfilePanel: FC<Props> = ({
   const [err, setErr] = useState<string | null>(null)
   /** GitHub 实证圈概况（登录后才有） */
   const [me, setMe] = useState<MeResponse | null>(null)
+  /** LLM 画像归纳（小模型排序 / 大模型解释 分工里的后者） */
+  const [insight, setInsight] = useState<ProfileInsight | null>(null)
+  const [busyInsight, setBusyInsight] = useState(false)
 
   // ── 自定义关键词（用户手动维护，可驱动爬虫抓取）──
   const [kws, setKws] = useState<CustomKeyword[]>([])
@@ -104,6 +110,28 @@ const ProfilePanel: FC<Props> = ({
       .then(setMe)
       .catch(() => setMe(null))
   }, [open, userId])
+
+  // ── 打开时读已缓存的 AI 画像归纳（画像变了后端会返回 null）──
+  useEffect(() => {
+    if (!open) return
+    getProfileSummary(userId)
+      .then((r) => setInsight(r.insight))
+      .catch(() => setInsight(null))
+  }, [open, userId])
+
+  // ── 让 LLM 归纳画像（1 次调用，按画像指纹缓存）──
+  const runSummarize = useCallback(async (force: boolean): Promise<void> => {
+    setBusyInsight(true)
+    try {
+      const res = await summarizeProfile(userId, force)
+      setInsight(res)
+      toast('AI 已更新你的画像归纳', 'ok')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'AI 归纳失败（可能限流，稍后再试）', 'warn')
+    } finally {
+      setBusyInsight(false)
+    }
+  }, [userId])
 
   const submitKeyword = async (): Promise<void> => {
     const kw = kwInput.trim()
@@ -299,6 +327,56 @@ const ProfilePanel: FC<Props> = ({
                 使用 GitHub 登录
               </button>
             </>
+          )}
+        </div>
+
+        {/* ── 🧠 AI 画像归纳（LLM：把标签变成人话，并揪出字典漏掉的残留噪声）── */}
+        <div className="card p-4 mt-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[13px] text-ink">🧠 AI 画像归纳</span>
+            <button
+              className="chip bg-canvas text-accent border border-hairline
+                         hover:bg-pearl transition-colors shrink-0"
+              onClick={() => void runSummarize(insight != null)}
+              disabled={busyInsight}
+            >
+              {busyInsight ? '分析中…' : insight ? '重新归纳' : '让 AI 归纳'}
+            </button>
+          </div>
+
+          {insight ? (
+            <>
+              <p className="text-[12.5px] leading-[1.65] text-ink mt-2.5">
+                {insight.summary}
+              </p>
+              {insight.interests.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-3">
+                  {insight.interests.map((t) => (
+                    <span
+                      key={t}
+                      className="chip bg-accent/[0.07] text-accent border border-accent/15"
+                    >
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {insight.noise.length > 0 && (
+                <p className="text-[10.5px] text-ink-faint mt-2.5 leading-relaxed">
+                  AI 判定为噪声、已从画像中剔除：
+                  {insight.noise.join('、')}
+                </p>
+              )}
+              <p className="text-[10px] text-ink-faint mt-2">
+                {insight.cached ? '缓存结果' : '刚生成'}
+                {insight.model ? ` · ${insight.model}` : ''}
+              </p>
+            </>
+          ) : (
+            <p className="text-[11px] text-ink-muted mt-2 leading-relaxed">
+              小模型负责排序，大模型负责解释。点一下，用你的标签与 GitHub 实证圈
+              生成一句话技术画像（1 次 LLM 调用，按画像指纹缓存）。
+            </p>
           )}
         </div>
 

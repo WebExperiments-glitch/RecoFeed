@@ -200,6 +200,31 @@ def get_feed(
             from api.translate_service import preheat_descriptions
             background_tasks.add_task(preheat_descriptions, ids)
 
+        # ── 富化：给卡片带一段 README 摘要 ──
+        # 满屏卡片如果只有两行字，版面会显得空；摘要让信息密度正常，
+        # 用户也更容易判断要不要点进去（→ 点击/收藏信号更干净）。
+        try:
+            from api.feed_service import readme_excerpt
+            if ids:
+                marks = ",".join("?" * len(ids))
+                ex_map: dict[int, str] = {}
+                for r in conn.execute(
+                    f"SELECT id, readme_md, description FROM repos WHERE id IN ({marks})",
+                    tuple(ids),
+                ):
+                    ex = readme_excerpt(r["readme_md"])
+                    # ⚠️ 很多仓库的 readme_md 就是「描述兜底」（形如 "# 仓库名 + 描述"），
+                    #    直接下发会让卡片上同一段字出现两遍 —— 用「包含」判断而不是前缀相等，
+                    #    否则前缀会被仓库名顶掉而漏判。
+                    desc = (r["description"] or "").strip()
+                    if ex and desc and desc[:40].lower() in ex.lower():
+                        ex = ""
+                    ex_map[int(r["id"])] = ex
+                for it in items:
+                    it["readme_excerpt"] = ex_map.get(int(it.get("repo_id") or 0), "")
+        except Exception as e:  # noqa: BLE001
+            logging.getLogger("recofeed").warning("README 摘要富化失败：%s", e)
+
         # ⭐ 本地双塔重排：有个人模型（personal_model_u*.pth）时，
         #    用「你的模型」对这页候选重新打分排序；没有模型则原样返回。
         try:
@@ -883,6 +908,46 @@ def ml_recall(user_id: int = Query(1),
                               "stars": r["stars"], "cosine": round(cos, 3),
                               "personal_score": round(personal.get(rid, -1), 3)})
     return {"items": items}
+
+
+class ExlainIn(BaseModel):
+    """批量请求推荐理由（一页卡片合并 1 次 LLM 调用）。"""
+    user_id: int = 1
+    repo_ids: list[int] = Field(default_factory=list)
+
+
+@router.get("/user/profile/summary")
+def user_profile_summary(user_id: int = Query(1)) -> dict[str, Any]:
+    """读取 LLM 画像归纳（只读缓存；没有或画像已变则返回 null）。"""
+    from api.insight_service import get_cached_insight
+    with get_conn() as conn:
+        return {"insight": get_cached_insight(conn, user_id)}
+
+
+@router.post("/user/profile/summarize")
+def user_profile_summarize(user_id: int = Query(1),
+                           force: bool = Query(False)) -> dict[str, Any]:
+    """⭐ 让 LLM 归纳你的画像（人话版 + 精确技术方向 + 噪声剔除）。
+
+    成本：1 次 LLM 调用；按画像指纹缓存，画像没变就直接返回旧结果。
+    """
+    from api.insight_service import summarize_profile
+    with get_conn() as conn:
+        res = summarize_profile(conn, user_id, force=force)
+    if not res.get("ok"):
+        raise HTTPException(status_code=503, detail=res.get("reason", "LLM 不可用"))
+    return res
+
+
+@router.post("/ml/explain")
+def ml_explain(payload: ExlainIn) -> dict[str, Any]:
+    """⭐ LLM 推荐理由：给一批卡片各生成一句话「为什么推荐给你」。
+
+    一页 10 张合并成 1 次调用，结果按 (用户, 卡片, 画像指纹) 缓存。
+    """
+    from api.insight_service import explain_cards
+    with get_conn() as conn:
+        return explain_cards(conn, payload.user_id, payload.repo_ids)
 
 
 @router.get("/user/events")
