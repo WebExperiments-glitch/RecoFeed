@@ -25,6 +25,7 @@ from core.config import (
     PROFILE_SOURCE_WEIGHTS,
     READ_WPM,
 )
+from tags.extractor import filter_noise_tags, is_noise_tag
 from user_profile.builder import (
     TagVector,
     owned_repo_weight,
@@ -204,7 +205,8 @@ def build_profile(conn: sqlite3.Connection, user_id: int) -> TagVector:
             return {}
         if not isinstance(arr, list):
             return {}
-        return {str(t).strip().lower(): 1.0 for t in arr if str(t).strip()}
+        return {str(t).strip().lower(): 1.0 for t in arr
+                if str(t).strip() and not is_noise_tag(str(t))}
 
     # ── 先统计每个标签被多少个不同仓库"拥有"（文档频率）──
     doc_freq: dict[str, int] = {}
@@ -233,7 +235,19 @@ def build_profile(conn: sqlite3.Connection, user_id: int) -> TagVector:
         df = doc_freq.get(tag, 1)
         if df <= 1:
             return 0.4          # 单仓库专属：很可能是项目名，降权
-        return min(1.0, math.log(1 + df) / math.log(1 + 5))
+        base = min(1.0, math.log(1 + df) / math.log(1 + 5))
+        # ⚠️ 通用泛词惩罚：出现在超过 60% 文档里的词（如 ai / agent），
+        #    几乎人人都在关注，不配当"你的兴趣主轴" —— 否则画像会退化成"你对 AI 感兴趣"。
+        if df > 0.6 * n_docs:
+            base *= 0.55
+        # 技术词典奖励：curated 的技术方向词（rvc / tts / gguf…）更有指向性
+        try:
+            from tags.extractor import tech_terms
+            if tag in tech_terms():
+                base = min(1.0, base * 1.3)
+        except Exception:
+            pass
+        return base
 
     tv = TagVector()
 
@@ -262,6 +276,7 @@ def build_profile(conn: sqlite3.Connection, user_id: int) -> TagVector:
         if w <= 0:
             continue
         tags = _filter_self_tags(_parse_tags(row["tags_json"]), row)
+        tags = filter_noise_tags(tags)            # ← 噪声词（README 套话）不进画像
         if not tags:
             continue
         tags = _rerank_within_repo(tags)          # ← 消除 README 长度偏差
@@ -271,6 +286,7 @@ def build_profile(conn: sqlite3.Connection, user_id: int) -> TagVector:
     # ── 兴趣圈：Star 仓库 ×0.6 ──
     for row in starred:
         tags = _filter_self_tags(_parse_tags(row["tags_json"]), row)
+        tags = filter_noise_tags(tags)            # ← 噪声词不进画像
         if not tags:
             continue
         tags = _rerank_within_repo(tags)
@@ -281,6 +297,7 @@ def build_profile(conn: sqlite3.Connection, user_id: int) -> TagVector:
     # ── 注意力圈：完整阅读 ×0.3 ──
     for row in read:
         tags = _filter_self_tags(_parse_tags(row["tags_json"]), row)
+        tags = filter_noise_tags(tags)            # ← 噪声词不进画像
         if not tags:
             continue
         tags = _rerank_within_repo(tags)

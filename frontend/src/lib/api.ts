@@ -11,10 +11,12 @@ import type {
   BatchTranslateResponse,
   CrawlResult,
   CustomKeywordUpsert,
+  ExplainResponse,
   FeedResponse,
   HotResponse,
   KeywordsResponse,
   MeResponse,
+  ProfileInsight,
   QueueStats,
   RepoDetail,
   SearchResponse,
@@ -329,4 +331,38 @@ export function syncGithub(): Promise<SyncResult> {
 
 export function logout(): Promise<unknown> {
   return request('/auth/logout', { method: 'POST' })
+}
+
+// ------------------------------------------------------------------ LLM 洞察层
+
+/** 批量生成推荐理由（一页 10 张合并 1 次 LLM 调用，结果按画像指纹缓存）。 */
+export function explainCards(
+  userId: number,
+  repoIds: number[],
+): Promise<ExplainResponse> {
+  return request('/ml/explain', {
+    method: 'POST',
+    body: JSON.stringify({ user_id: userId, repo_ids: repoIds }),
+  }, 120_000)
+}
+
+/** 读取已缓存的 LLM 画像归纳（画像变了会返回 null）。 */
+export function getProfileSummary(
+  userId: number,
+): Promise<{ insight: ProfileInsight | null }> {
+  return request<{ insight: ProfileInsight | null }>(
+    `/user/profile/summary?user_id=${userId}`,
+  )
+}
+
+/** 让 LLM 归纳画像（1 次调用；force=true 忽略缓存重算）。 */
+export function summarizeProfile(
+  userId: number,
+  force = false,
+): Promise<ProfileInsight> {
+  return request<ProfileInsight>(
+    `/user/profile/summarize?user_id=${userId}&force=${force ? 'true' : 'false'}`,
+    { method: 'POST' },
+    150_000,
+  )
 }

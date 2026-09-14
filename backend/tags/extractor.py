@@ -144,6 +144,10 @@ def extract_readme_tags(readme_md: str, topk: int = 50) -> dict[str, float]:
             continue
         out[w] = float(weight)
 
+    # ⭐ 噪声过滤（源头治理）：README 套话 / 无指向通用词不进标签集。
+    #    只过滤 TF-IDF 部分 —— 词典回填的词是人工维护的技术术语，保留。
+    out = filter_noise_tags(out)
+
     # ⭐ 词典回填：技术词典里收录的词若在原文出现但未被 TF-IDF 选中，
     #    给予其一个不高不低的基准分，保证专有名词不被漏掉。
     out = _backfill_dict_terms(clean, out)
@@ -165,6 +169,66 @@ def _dict_terms() -> set[str]:
 
 
 _DICT_TERMS_CACHE: set[str] | None = None
+
+
+# ---------------------------------------------------------------- 噪声标签
+
+_NOISE_CACHE: set[str] | None = None
+
+
+def tech_terms() -> set[str]:
+    """技术词典里的术语集合（公开入口，供画像加权使用）。"""
+    return _dict_terms()
+
+
+def noise_tags() -> set[str]:
+    """噪声词表（dict/noise_tags.txt，可维护、可审计）。"""
+    global _NOISE_CACHE
+    if _NOISE_CACHE is None:
+        words: set[str] = set()
+        try:
+            text = (DICT_DIR / "noise_tags.txt").read_text(encoding="utf-8")
+            for line in text.splitlines():
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                for w in line.split():
+                    words.add(w.lower())
+        except OSError:
+            pass
+        _NOISE_CACHE = words
+    return _NOISE_CACHE
+
+
+def is_noise_tag(tag: str) -> bool:
+    """标签是否属于噪声。
+
+    ⭐ 这是**统一入口**：画像构建、补货查询词、前端展示都必须过它 ——
+       之前的问题正是"refill 有 _is_generic 过滤，但 GitHub topics 那条链路没过滤"，
+       导致 support / install / https / easily 进了画像、还会被当成爬虫查询词。
+
+    噪声的三类：
+      ① README 模板套话（install / usage / license / contributing…）
+      ② 无指向通用词（good / easily / version / tools / platform…）
+      ③ 元信息与收录类（https / json / awesome-list / list…）
+    """
+    t = (tag or "").strip().lower()
+    if not t or len(t) < 2:
+        return True
+    if t in noise_tags():
+        return True
+    # 纯版本号 / 年份（v2 / 1.0.3 / 2024）
+    if re.fullmatch(r"v?\d+(\.\d+)*", t) or re.fullmatch(r"(19|20)\d{2}", t):
+        return True
+    # 没有任何字母汉字（纯符号 / emoji）
+    if not re.search(r"[a-z\u4e00-\u9fff]", t):
+        return True
+    return False
+
+
+def filter_noise_tags(tags: dict[str, float]) -> dict[str, float]:
+    """按噪声表过滤标签字典（多处复用的便捷包装）。"""
+    return {t: w for t, w in tags.items() if not is_noise_tag(t)}
 
 
 def _stopwords() -> set[str]:
