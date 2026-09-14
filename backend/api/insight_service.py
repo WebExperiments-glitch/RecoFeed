@@ -21,6 +21,7 @@ import hashlib
 import json
 import re
 import sqlite3
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -47,6 +48,14 @@ CREATE TABLE IF NOT EXISTS llm_insights (
   model        TEXT,
   created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (user_id, kind)
+);
+
+CREATE TABLE IF NOT EXISTS profile_noise (
+  user_id    INTEGER NOT NULL,
+  tag        TEXT    NOT NULL,
+  source     TEXT    NOT NULL DEFAULT 'llm',
+  created_at TEXT    NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (user_id, tag)
 );
 
 CREATE TABLE IF NOT EXISTS llm_explanations (
@@ -89,20 +98,40 @@ def _extract_json(text: str) -> Any | None:
 
 def _llm_json(conn: sqlite3.Connection, system: str, user: str,
               *, temperature: float = 0.4) -> tuple[Any | None, str | None]:
-    """走翻译同一条级联调用 LLM 并解析 JSON。
+    """走翻译同一条级联调用 LLM 并解析 JSON。返回 (数据, 模型名)；失败 (None, None)。
 
-    返回 (数据, 模型名)；失败返回 (None, None)。
+    ⚠️ 不能直接用 translate_service._quota_reject_reason：那是**免费档专属闸门**
+       （它会在免费额度用尽时把整条链拦掉，连付费兜底一起挡）。
+       实测踩过：免费档 45/45 用满后，画像归纳直接 503，而 DeepSeek 兜底用量还是 0。
+       正确做法：免费额度可用就走免费链，用尽则**显式切到付费兜底**（有自己的日限额）。
     """
-    for _ in range(4):                      # 最多换 4 个模型
-        reason = _quota_reject_reason(conn)
-        if reason:
-            return None, None
-        try:
-            _check_rate_limit(conn)
-        except Exception:
-            return None, None
-        entry = _pick_model()
-        if not entry:
+    free_ok = True
+    try:
+        from core.config import LLM_MAX_PER_DAY, LLM_MAX_PER_MINUTE
+        from api.translate_service import (
+            LLM_CHAIN, _deepseek_quota_ok, _free_usage_counts, _is_paid,
+            _model_cooldown, _provider_ready,
+        )
+        _deepseek_quota_ok(conn)          # 付费超限时会把 deepseek 冷却，下面自然跳过
+        n_min, n_day = _free_usage_counts(conn, time.time())
+        free_ok = (n_min < LLM_MAX_PER_MINUTE) and (n_day < LLM_MAX_PER_DAY)
+    except Exception:
+        pass
+
+    for _ in range(4):
+        entry = None
+        if free_ok:
+            entry = _pick_model()
+        if entry is None:
+            # 免费额度用尽 / 免费模型都在冷却 → 找付费兜底
+            now = time.time()
+            entry = next(
+                (e for e in LLM_CHAIN
+                 if _is_paid(e["id"]) and _provider_ready(e)
+                 and _model_cooldown.get(e["id"], 0) < now),
+                None,
+            )
+        if entry is None:
             return None, None
         try:
             content = _chat(entry["provider"], entry["id"], system, user, temperature)
@@ -113,6 +142,8 @@ def _llm_json(conn: sqlite3.Connection, system: str, user: str,
         except Exception as e:  # noqa: BLE001
             if "429" in str(e):
                 _mark_model_429(entry["id"])
+                continue
+            # 其它错误（超时/解析失败）也换下一个模型试
             continue
     return None, None
 
@@ -147,13 +178,22 @@ def _top_tags(conn: sqlite3.Connection, user_id: int, limit: int = 30) -> list[d
 
 
 def profile_fingerprint(conn: sqlite3.Connection, user_id: int) -> str:
-    """画像指纹：标签权重排序 + 证据量 → 变了就说明画像更新了，缓存失效。"""
+    """画像指纹：判断"画像是否变了"，变了才让 LLM 归纳与缓存失效。
+
+    ⚠️ 只用**标签名**，不要用权重 —— 踩过的坑：
+       LLM 归纳完会把噪声词写进黑名单 → 画像重建 → 权重重新归一化 →
+       若指纹包含权重，刚生成的归纳立刻被判为过期，
+       用户刷新面板看到又是"让 AI 归纳"（自己作废自己的缓存）。
+    现在指纹 = 标签名序列 + 证据条数 + 黑名单规模：
+       标签集合真的变了 / 同步了新的仓库 / 黑名单增删 → 才重新归纳。
+    """
     ensure_tables(conn)
-    rows = _top_tags(conn, user_id, 30)
+    names = "|".join(r["tag"] for r in _top_tags(conn, user_id, 30))
     ev = conn.execute(
         "SELECT COUNT(*) AS n FROM github_footprint WHERE user_id = ?", (user_id,)
     ).fetchone()["n"]
-    raw = "|".join(f"{r['tag']}:{r['weight']}" for r in rows) + f"#ev{ev}"
+    deny = len(load_noise_denylist(conn, user_id))
+    raw = f"{names}#ev{ev}#deny{deny}"
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
 
 
@@ -237,6 +277,23 @@ def summarize_profile(conn: sqlite3.Connection, user_id: int,
         "fingerprint": fp,
         "created_at": _now(),
     }
+    # ⭐ 让 AI 的判断真正生效：噪声词写入黑名单，然后**立刻重建画像**。
+    #    顺序很关键：先落黑名单 → 再重建（标签集合稳定下来）→ 最后才算指纹存缓存。
+    #    否则重建会让标签名变化、指纹跟着漂，刚生成的归纳又会被判过期。
+    if out["noise"]:
+        add_noise_tags(conn, user_id, out["noise"])
+        out["noise_applied"] = len(out["noise"])
+        try:
+            from user_profile.service import rebuild_profile
+            rebuild_profile(conn, user_id)
+            out["profile_rebuilt"] = True
+        except Exception as exc:  # noqa: BLE001
+            log_msg = f"画像重建失败（不影响归纳）：{exc}"
+            print(log_msg)
+        # 重建之后重算指纹，缓存才对得上
+        fp = profile_fingerprint(conn, user_id)
+        out["fingerprint"] = fp
+
     conn.execute(
         """INSERT INTO llm_insights (user_id, kind, fingerprint, content_json, model, created_at)
            VALUES (?, 'profile_summary', ?, ?, ?, datetime('now'))
@@ -371,3 +428,36 @@ def explain_prompt_demo(conn: sqlite3.Connection, user_id: int) -> dict[str, Any
     """返回将要发给 LLM 的 prompt（调试/展示用，不消耗额度）。"""
     ctx = _profile_context(conn, user_id)
     return {"system": _EXPLAIN_SYSTEM, "profile": ctx}
+
+# ---------------------------------------------------------------- 噪声黑名单
+
+def load_noise_denylist(conn: sqlite3.Connection, user_id: int) -> set[str]:
+    """读取 LLM 判定过的噪声标签（持久化黑名单）。
+
+    ⭐ 为什么必须落库：LLM 归纳出的 noise 列表原本只是**展示**，
+       用户看到的画像里 rc / lw / id / 复刻 这些它自己都说是垃圾的词还挂着。
+       现在写入黑名单，画像构建时真正剔除 —— AI 的判断要生效，不是摆设。
+    """
+    try:
+        ensure_tables(conn)
+        return {str(r["tag"]).lower() for r in conn.execute(
+            "SELECT tag FROM profile_noise WHERE user_id = ?", (user_id,))}
+    except sqlite3.OperationalError:
+        return set()
+
+
+def add_noise_tags(conn: sqlite3.Connection, user_id: int,
+                   tags: list[str], source: str = "llm") -> int:
+    """把噪声词写入黑名单（幂等）。"""
+    ensure_tables(conn)
+    n = 0
+    for t in tags:
+        t = str(t).strip().lower()
+        if not t:
+            continue
+        conn.execute(
+            """INSERT INTO profile_noise (user_id, tag, source) VALUES (?,?,?)
+               ON CONFLICT(user_id, tag) DO UPDATE SET source = excluded.source""",
+            (user_id, t, source))
+        n += 1
+    return n

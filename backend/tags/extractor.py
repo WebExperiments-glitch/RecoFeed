@@ -181,6 +181,13 @@ def tech_terms() -> set[str]:
     return _dict_terms()
 
 
+# 允许保留的 2 字符标签（这些确实指向技术方向，不能一刀切）
+_SHORT_OK = {
+    "ai", "ml", "ui", "ux", "db", "os", "js", "ts", "go", "c", "r",
+    "3d", "2d", "vr", "ar", "ci", "ip", "qt", "nlp", "cv", "k8s",
+}
+
+
 def noise_tags() -> set[str]:
     """噪声词表（dict/noise_tags.txt，可维护、可审计）。"""
     global _NOISE_CACHE
@@ -207,10 +214,11 @@ def is_noise_tag(tag: str) -> bool:
        之前的问题正是"refill 有 _is_generic 过滤，但 GitHub topics 那条链路没过滤"，
        导致 support / install / https / easily 进了画像、还会被当成爬虫查询词。
 
-    噪声的三类：
+    噪声的几类：
       ① README 模板套话（install / usage / license / contributing…）
       ② 无指向通用词（good / easily / version / tools / platform…）
       ③ 元信息与收录类（https / json / awesome-list / list…）
+      ④ 短碎片（rc / lw / id 这类切词残留；见 _SHORT_OK 白名单）
     """
     t = (tag or "").strip().lower()
     if not t or len(t) < 2:
@@ -222,6 +230,10 @@ def is_noise_tag(tag: str) -> bool:
         return True
     # 没有任何字母汉字（纯符号 / emoji）
     if not re.search(r"[a-z\u4e00-\u9fff]", t):
+        return True
+    # ⚠️ 2 字符英文标签通常是切词碎片（实测出现过 rc / lw / id / dsh），
+    #    只保留确实指向技术方向的白名单（ai / ui / db / js…）。
+    if len(t) == 2 and re.fullmatch(r"[a-z]{2}", t) and t not in _SHORT_OK:
         return True
     return False
 

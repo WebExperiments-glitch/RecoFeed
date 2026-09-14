@@ -206,7 +206,20 @@ def build_profile(conn: sqlite3.Connection, user_id: int) -> TagVector:
         if not isinstance(arr, list):
             return {}
         return {str(t).strip().lower(): 1.0 for t in arr
-                if str(t).strip() and not is_noise_tag(str(t))}
+                if str(t).strip() and not is_noise_tag(str(t))
+                and str(t).strip().lower() not in noise_denylist}
+
+    # ── LLM 判定过的噪声黑名单（持久化，见 api/insight_service）──
+    #     AI 说是噪声的，这里就必须真的剔除，否则用户看到的画像还是脏的。
+    try:
+        from api.insight_service import load_noise_denylist
+        noise_denylist = load_noise_denylist(conn, user_id)
+    except Exception:
+        noise_denylist = set()
+
+    def _clean(tags: dict[str, float]) -> dict[str, float]:
+        return {t: w for t, w in filter_noise_tags(tags).items()
+                if t not in noise_denylist}
 
     # ── 先统计每个标签被多少个不同仓库"拥有"（文档频率）──
     doc_freq: dict[str, int] = {}
@@ -276,7 +289,7 @@ def build_profile(conn: sqlite3.Connection, user_id: int) -> TagVector:
         if w <= 0:
             continue
         tags = _filter_self_tags(_parse_tags(row["tags_json"]), row)
-        tags = filter_noise_tags(tags)            # ← 噪声词（README 套话）不进画像
+        tags = _clean(tags)                       # ← 词典噪声 + LLM 判定噪声
         if not tags:
             continue
         tags = _rerank_within_repo(tags)          # ← 消除 README 长度偏差
@@ -286,7 +299,7 @@ def build_profile(conn: sqlite3.Connection, user_id: int) -> TagVector:
     # ── 兴趣圈：Star 仓库 ×0.6 ──
     for row in starred:
         tags = _filter_self_tags(_parse_tags(row["tags_json"]), row)
-        tags = filter_noise_tags(tags)            # ← 噪声词不进画像
+        tags = _clean(tags)                       # ← 词典噪声 + LLM 判定噪声
         if not tags:
             continue
         tags = _rerank_within_repo(tags)
@@ -297,7 +310,7 @@ def build_profile(conn: sqlite3.Connection, user_id: int) -> TagVector:
     # ── 注意力圈：完整阅读 ×0.3 ──
     for row in read:
         tags = _filter_self_tags(_parse_tags(row["tags_json"]), row)
-        tags = filter_noise_tags(tags)            # ← 噪声词不进画像
+        tags = _clean(tags)                       # ← 词典噪声 + LLM 判定噪声
         if not tags:
             continue
         tags = _rerank_within_repo(tags)

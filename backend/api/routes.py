@@ -48,6 +48,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
+from tags.extractor import is_noise_tag
 from api.auth_service import (
     build_login_url,
     create_session,
@@ -630,6 +631,22 @@ def user_profile(user_id: int = Query(1)) -> dict[str, Any]:
             return []
 
     interests = _parse(row["top_topics"])
+
+    # ── 画像展示的收口规则 ──
+    # 一次展示 50 个标签 = 垃圾堆：长尾全是 0.1x 的描述性词与项目名
+    # （公式 / 热门 / 监控 / cordis / design-tokens…），真正有指向的只有前 10 个。
+    # 规则：剔除噪声词 + 只保留「相对权重 ≥ 25% 榜首」的标签 + 最多 24 个。
+    # 用相对权重而不是绝对阈值：不同用户的画像量纲不同，相对值能自适应。
+    try:
+        clean = [it for it in interests
+                 if float(it.get("weight", 0)) > 0
+                 and not is_noise_tag(str(it.get("tag", "")))]
+        top_w = max((float(it["weight"]) for it in clean), default=0.0)
+        if top_w > 0:
+            clean = [it for it in clean if float(it["weight"]) >= 0.25 * top_w]
+        interests = clean[:24]
+    except Exception:
+        pass
     languages = _parse(row["top_languages"])
 
     return {
