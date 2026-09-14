@@ -602,3 +602,47 @@ gitee
 设计
 # ⚠️ 注意：architecture / design / animation 这类英文词如果确实指向技术方向
 #    （如 design-system 是真实领域），不要写死在这里，交给 LLM 黑名单判断更准。
+
+# ── ⑨ README 形容词（实测标签：original / implemented）──
+original
+implemented
+implement
+based
+using
+uses
+provides
+provide
+designed
+includes
+include
+offers
+offer
+allows
+allowing
+enables
+enabling
+helps
+making
+gives
+works
+work
+need
+needs
+required
+requires
+want
+wants
+able
+make
+made
+comprehensive
+robust
+scalable
+reliable
+modular
+extensible
+portable
+readable
+maintainable
+customizable
+configurable
