@@ -15,18 +15,29 @@ from core.config import DB_PATH, SCHEMA_PATH
 
 
 def connect(db_path: str | None = None) -> sqlite3.Connection:
-    """建立连接并设置 pragma。"""
+    """建立连接并设置 pragma。
+
+    ⚠️ isolation_level=None（自动提交）是刻意的，原因是一次真实的 500 事故：
+        Python sqlite3 默认会隐式开启事务 —— 读了几行之后再做写操作，
+        就变成「读事务升级为写事务」。而 SQLite 对**升级**场景有特殊处理：
+        如果升级期间别的连接写过，它会**立刻**返回 SQLITE_BUSY，
+        完全不理会 busy_timeout（这是为了避免死锁，属于设计行为）。
+        表现就是：Feed 先 SELECT 队列、再 DELETE 出队，
+        恰好撞上后台任务（翻译预热）刚提交的写 →
+        刷卡几页后随机 500 database is locked，且怎么调大 busy_timeout 都没用。
+        改成自动提交后每条语句独立成事务，不存在"升级"，问题消失。
+    本项目是单用户本地库，没有跨语句原子性要求，自动提交完全够用。
+    """
     conn = sqlite3.connect(
         db_path or str(DB_PATH),
         check_same_thread=False,
         timeout=10.0,
+        isolation_level=None,          # ← 自动提交，规避读→写升级死锁
     )
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA synchronous = NORMAL")
-    # ⚠️ 写锁等待：后台任务（翻译预热/补货/画像重建）与前台请求会并发写同一个库，
-    #    SQLite 同一时刻只允许一个写者，等不到锁就报 "database is locked"。
-    #    压测（jobs/ml_simulate.py）时实测会触发 500，所以显式放宽到 30s。
+    # 写锁等待（对"真·写-写"竞争有效；升级死锁由上面的自动提交规避）
     conn.execute("PRAGMA busy_timeout = 30000")
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
