@@ -193,7 +193,18 @@ def profile_fingerprint(conn: sqlite3.Connection, user_id: int) -> str:
         "SELECT COUNT(*) AS n FROM github_footprint WHERE user_id = ?", (user_id,)
     ).fetchone()["n"]
     deny = len(load_noise_denylist(conn, user_id))
-    raw = f"{names}#ev{ev}#deny{deny}"
+    # ⚠️ 语料规模 + 个人模型版本也要进指纹：
+    #    扩库/重训会改变个人分，旧解释（比如"不合你的口味"）就会与新的匹配度自相矛盾。
+    try:
+        n_repos = conn.execute("SELECT COUNT(*) AS n FROM repos").fetchone()["n"]
+    except Exception:
+        n_repos = 0
+    try:
+        from ml.user_model import model_path
+        mtime = int(model_path(user_id).stat().st_mtime)
+    except Exception:
+        mtime = 0
+    raw = f"{names}#ev{ev}#deny{deny}#repos{n_repos}#m{mtime}"
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
 
 

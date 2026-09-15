@@ -49,8 +49,10 @@ const App: FC = () => {
   const [showSearch, setShowSearch] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
   const [detailId, setDetailId] = useState<number | null>(null)
-  /** 当前正在看的卡片（桌面端右侧信息面板的数据源，由 FeedList 上报） */
+  /** 当前正在看的卡片（侧滑抽屉的数据源，由 FeedList 上报） */
   const [activeItem, setActiveItem] = useState<FeedItem | null>(null)
+  /** 侧滑抽屉（项目详情）是否展开 */
+  const [drawerOpen, setDrawerOpen] = useState(false)
 
   const fetchingRef = useRef(false)
   /** 首屏加载失败的重试计数（后端瞬时抖动不该直接甩一屏报错） */
@@ -281,32 +283,36 @@ python3 app.py`}
         onOpenProfile={() => setShowProfile(true)}
       />
 
-      {/* ── 桌面双栏 / 移动单列 ──
-          参考「抖音网页版」：左边是刷卡区（固定手机宽度，保留上下滑的手感），
-          右边承载完整信息（README 全文 / AI 理由 / 指标 / 操作）。
-          ⚠️ 之前是单列限宽居中 → 大屏两侧各留一条空白，宽度完全没用上。
-          移动端（<1024px）右侧面板不渲染，行为与原来完全一致。 */}
-      <div className="h-full w-full flex">
-        <div className="flex-1 min-w-0 lg:max-w-[560px] lg:border-r lg:border-divider">
+      {/* ── 居中信息流（限宽一列）+ 侧滑抽屉 ──
+          信息流居中成一列（≈手机栏宽度），桌面两侧的留白由**按需滑出的抽屉**承担：
+          想刷时屏幕干净，想看细节划出抽屉读 README。
+          这样既不浪费宽度，也不破坏"刷"这个主行为。 */}
+      <div className="h-full w-full flex justify-center">
+        <div className="relative w-full max-w-[620px] h-full lg:border-x lg:border-divider">
           <FeedList
             items={items}
             meta={meta}
             loading={loading}
             userId={userId}
-            onOpenDetail={(it) => setDetailId(it.repo_id)}
+            onOpenDetail={() => setDrawerOpen(true)}
             onDislike={(it) => void onDislike(it)}
             onReachEnd={onReachEnd}
             onActiveChange={setActiveItem}
           />
         </div>
-
-        <SidePanel
-          item={activeItem}
-          userId={userId}
-          onOpenDetail={(it) => setDetailId(it.repo_id)}
-          onDislike={(it) => void onDislike(it)}
-        />
       </div>
+
+      <SidePanel
+        open={drawerOpen}
+        item={activeItem}
+        userId={userId}
+        onClose={() => setDrawerOpen(false)}
+        onOpenDetail={(it) => {
+          setDrawerOpen(false)
+          setDetailId(it.repo_id)
+        }}
+        onDislike={(it) => void onDislike(it)}
+      />
 
       <SearchPanel
         userId={userId}

@@ -191,7 +191,15 @@ def get_feed(
             items = [candidate_to_dict(c) for c in result["items"]]
         else:
             # 常规刷卡 → 缓存池
-            payload = get_queue_feed(conn, user_id, limit=limit)
+            # ⭐ 有个人模型时多取候选（limit×3）：个人分硬门槛会踢掉一部分，
+            #    多取才能保证每页仍然是满的。
+            try:
+                from ml.user_model import model_path as _mp
+                _has_model = _mp(user_id).exists()
+            except Exception:
+                _has_model = False
+            fetch_n = min(50, limit * 3) if _has_model else limit
+            payload = get_queue_feed(conn, user_id, limit=fetch_n)
             items = payload["items"]
             result = payload
 
@@ -234,9 +242,21 @@ def get_feed(
                 conn, user_id, items,
                 get_repo_id=lambda it: int(it["repo_id"]),
                 get_score=lambda it: float(it.get("score") or 0.0),
+                min_keep=limit,
             )
             if ml_info.get("applied"):
-                result.setdefault("meta", {})["ml_rerank"] = ml_info
+                # 个人分透出给前端：卡片上的「匹配度」应该用它，
+                # 而不是结构化质量分（否则会出现"AI 说不合口味 / 卡片却 0.57"的自相矛盾）
+                sc = ml_info.get("scores") or {}
+                for it in items:
+                    ps = sc.get(int(it.get("repo_id") or 0))
+                    if ps is not None:
+                        it["personal_score"] = ps
+                # 门槛踢掉一部分后补回 limit，保证每页满
+                items = items[:limit]
+                result.setdefault("meta", {})["ml_rerank"] = {
+                    k: v for k, v in ml_info.items() if k != "scores"
+                }
         except Exception as e:  # noqa: BLE001 —— 重排失败绝不能让 Feed 挂掉
             logging.getLogger("recofeed").warning("本地重排跳过：%s", e)
 
