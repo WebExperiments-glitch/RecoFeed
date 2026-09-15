@@ -234,7 +234,7 @@ def build_feed(
     # ── 搜索干预 ──
     si: SearchIntervention | None = None
     if search_query:
-        from tags.extractor import extract_query_tags
+        from tags.extractor import display_tags, extract_query_tags
         qtags = extract_query_tags(search_query)
         if qtags:
             si = SearchIntervention(tags=qtags)
@@ -315,8 +315,11 @@ def candidate_to_dict(c: Candidate) -> dict:
         "language": c.language,
         "stars": c.stars,
         "topics": c.topics[:8],
+        # 同上：展示层也要过滤（画像层过滤 ≠ 卡片干净）
         "tags": [{"tag": k, "weight": round(v, 3)}
-                 for k, v in sorted(c.tags.items(), key=lambda kv: -kv[1])[:12]],
+                 for k, v in display_tags(
+                     c.tags, name=c.name, owner=c.owner,
+                     topics=c.topics or [], limit=8)],
         "score": round(c.score, 4),
         "score_detail": c.score_detail,
         "channels": c.source_channels,

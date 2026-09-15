@@ -37,12 +37,35 @@ def main() -> None:
     args = ap.parse_args()
 
     init_jieba()
+
+    # ⭐ 先生成/刷新「语料库 topics 词表」——它是白名单闸门的依据之一。
+    #    GitHub topics 是仓库作者自己打的标签，是**真实英文技术词表**；
+    #    只靠人工技术词典（391 词）太窄，会导致大量仓库一个标签都留不下（实测 25%）。
+    if not args.dry_run:
+        with get_conn() as _c:
+            vocab: set[str] = set()
+            for r in _c.execute("SELECT topics FROM repos WHERE topics IS NOT NULL AND topics != ''"):
+                try:
+                    for t in json.loads(r["topics"]):
+                        tt = str(t).strip().lower()
+                        if 2 <= len(tt) <= 40:
+                            vocab.add(tt)
+                except Exception:
+                    continue
+        vp = _BACKEND_DIR / "dict" / "topics_vocab.txt"
+        header = (
+            "# 由 jobs/retag.py 自动生成：语料库全部仓库的 GitHub topics 并集\n"
+            "# 用途：英文标签的技术性白名单依据（topics 是仓库作者自打的真实技术词）\n"
+        )
+        vp.write_text(header + "\n".join(sorted(vocab)) + "\n", encoding="utf-8")
+        print(f"✓ 已刷新 topics 词表：{len(vocab)} 个技术词 → {vp.name}")
+
     removed: Counter[str] = Counter()
     changed = total = 0
 
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT id, full_name, readme_md, tags_json FROM repos ORDER BY id"
+            "SELECT id, full_name, name, owner, topics, readme_md, tags_json FROM repos ORDER BY id"
         ).fetchall()
         if args.limit:
             rows = rows[: args.limit]
@@ -52,7 +75,13 @@ def main() -> None:
             readme = r["readme_md"] or ""
             if not readme.strip():
                 continue
-            new_tags = extract_readme_tags(readme, topk=50)
+            import json as _json
+            try:
+                _topics = _json.loads(r["topics"] or "[]")
+            except Exception:
+                _topics = []
+            new_tags = extract_readme_tags(readme, topk=50,
+                                           topics=_topics, name=r["name"] or "")
 
             # 统计被剔除的旧噪声（用于报告，说明改动效果）
             try:

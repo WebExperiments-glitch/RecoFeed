@@ -115,7 +115,9 @@ def clean_readme(text: str, max_chars: int = 20_000) -> str:
 
 
 # ------------------------------------------------------------------ 提取
-def extract_readme_tags(readme_md: str, topk: int = 50) -> dict[str, float]:
+def extract_readme_tags(readme_md: str, topk: int = 50, *,
+                        topics: list[str] | None = None,
+                        name: str = "") -> dict[str, float]:
     """从 README 提取关键词（第一层：项目核心）。
 
     topk 默认 50（而非 20）：实测发现词典中的复合词会被更长的词吸收，
@@ -148,9 +150,21 @@ def extract_readme_tags(readme_md: str, topk: int = 50) -> dict[str, float]:
     #    只过滤 TF-IDF 部分 —— 词典回填的词是人工维护的技术术语，保留。
     out = filter_noise_tags(out)
 
+    # ⭐ 技术性闸门（白名单）：英文标签必须有技术依据，否则一律丢弃。
+    #    修的是"README 里的普通名词当作标签"（anything / track / checkpoint / available…）
+    tset = _topic_set(topics)
+    out = {t: v for t, v in out.items()
+           if not t.isascii() or is_justified_tag(t, topics=tset)}
+
     # ⭐ 词典回填：技术词典里收录的词若在原文出现但未被 TF-IDF 选中，
     #    给予其一个不高不低的基准分，保证专有名词不被漏掉。
+    #    （回填词本身来自人工维护的技术词典 = 天然有依据，不再过闸门）
     out = _backfill_dict_terms(clean, out)
+
+    # 仓库名自标签顺手去掉（retag 时也能清掉历史遗留）
+    if name:
+        low = name.lower()
+        out = {t: v for t, v in out.items() if t != low}
     return out
 
 
@@ -367,3 +381,104 @@ def extract_query_tags(query: str, topk: int = 10) -> dict[str, float]:
         return {}
     eq = 1.0 / len(words)
     return {w: eq for w in dict.fromkeys(words)}
+
+# ---------------------------------------------------------------- 技术性闸门（白名单）
+
+# 技术形态：含数字（gpt4 / llama3 / web3）、连字符（voice-cloning）、版本点号（vue3）
+_TECH_SHAPE = re.compile(r"[a-z]+\d|\d+[a-z]|[a-z]+-[a-z]+")
+
+
+def _topic_set(topics: list[str] | None) -> set[str]:
+    out: set[str] = set()
+    for t in (topics or []):
+        tt = str(t).strip().lower()
+        if tt:
+            out.add(tt)
+    return out
+
+
+def is_justified_tag(tag: str, *, topics: set[str] | None = None) -> bool:
+    """标签是否有"技术依据" —— 白名单闸门。
+
+    ⭐ 为什么改成白名单（血泪教训）
+       前几轮一直在扩黑名单（support/install/https/easily…），但**黑名单永远漏词**：
+       接着又冒出 anything / track / checkpoint / available / segment，
+       甚至仓库名本身（efficientsam）都能当标签出现在卡片上。
+       README 是自然语言，TF-IDF 从里面捞出来的英文名词里混着大量普通词汇，
+       逐个封杀是无底洞。
+
+       换个方向：**只保留能证明是技术词的标签**，依据满足其一即可：
+         ① 命中技术词典（人工维护的技术术语）
+         ② 命中该仓库的 GitHub topics（仓库作者自己打的标签，最干净的一手信息）
+         ③ 命中领域方向词表
+         ④ 具备技术形态（含数字/连字符，如 gpt4、voice-cloning）
+       中文标签维持原策略（黑名单 + 长度），因为中文技术词碎、白名单会误伤。
+    """
+    t = (tag or "").strip().lower()
+    if not t:
+        return False
+    if not t.isascii():
+        return True                      # 中文走黑名单逻辑，不做白名单
+    if t in _dict_terms():
+        return True
+    if topics and t in topics:
+        return True
+    # 语料库 topics 并集（真实英文技术词表，见 dict/topics_vocab.txt）
+    # —— 没有这份词表时，25% 的仓库会一个标签都留不下（实测），召回直接塌掉
+    if t in _vocab_terms():
+        return True
+    if _TECH_SHAPE.search(t):
+        return True
+    return False
+
+
+_VOCAB_CACHE: set[str] | None = None
+
+
+def _vocab_terms() -> set[str]:
+    """语料库 topics 并集（由 jobs/retag.py 自动生成）。"""
+    global _VOCAB_CACHE
+    if _VOCAB_CACHE is None:
+        words: set[str] = set()
+        try:
+            text = (DICT_DIR / "topics_vocab.txt").read_text(encoding="utf-8")
+            for line in text.splitlines():
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    words.add(line.lower())
+        except OSError:
+            pass
+        _VOCAB_CACHE = words
+    return _VOCAB_CACHE
+
+
+def display_tags(tags: dict[str, float], *, name: str = "", owner: str = "",
+                 topics: list[str] | None = None, limit: int = 8,
+                 ) -> list[tuple[str, float]]:
+    """给前端展示用的标签列表：三层过滤后按权重排。
+
+    卡片上显示的标签必须干净 —— 这是用户直接看到的东西。
+    过滤顺序：噪声表 → 仓库名自标签 → 技术性闸门。
+    若闸门后一个不剩，退回"噪声过滤后的前 3 个"（宁可少，也不要空）。
+    """
+    if not tags:
+        return []
+    clean = filter_noise_tags(tags)
+
+    # 仓库名自标签（efficientsam 这种由名字派生的词）
+    self_words: set[str] = set()
+    for raw in (name, owner):
+        if not raw:
+            continue
+        low = str(raw).lower()
+        self_words.add(low)
+        for part in low.replace("/", "-").replace("_", "-").split("-"):
+            part = part.strip()
+            if len(part) >= 3:
+                self_words.add(part)
+    clean = {t: v for t, v in clean.items() if t not in self_words}
+
+    tset = _topic_set(topics)
+    gated = {t: v for t, v in clean.items() if is_justified_tag(t, topics=tset)}
+    chosen = gated or dict(sorted(clean.items(), key=lambda kv: -kv[1])[:3])
+    return sorted(chosen.items(), key=lambda kv: -kv[1])[:limit]
