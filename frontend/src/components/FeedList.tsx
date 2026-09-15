@@ -230,7 +230,7 @@ const FeedList: FC<Props> = ({
       //    导致内容横向溢出被裁切。用 w-screen + max-w-full 锁定宽度，
       //    再用 overscroll-contain 阻止滚动穿透到 body。
       className="snap-feed h-full w-full max-w-full overflow-y-auto overflow-x-hidden
-                 overscroll-contain"
+                 overscroll-contain pt-[52px]"
       style={{ width: '100%', maxWidth: '100vw' }}
     >
       {items.map((item, i) => (

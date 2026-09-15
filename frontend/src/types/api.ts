@@ -21,6 +21,8 @@ export interface FeedItem {
   description: string | null
   /** README 纯文本摘要（后端按 markdown 清洗过，约 420 字）——用于填充卡片版面 */
   readme_excerpt?: string
+  /** 个人模型打分（0~1）；有它时「匹配度」展示这个，而不是结构化质量分 */
+  personal_score?: number
   language: string | null
   stars: number
   topics: string[]

@@ -26,6 +26,12 @@ from ml import embedder, user_model
 BLEND_PERSONAL = 0.7
 # 候选池大小（召回后进入精排的条数）
 RERANK_POOL = 50
+# ⭐ 个人分硬门槛：个人模型判定"不感兴趣"（p < 阈值）的仓库直接踢出，
+#    不看它有多少 star、结构化质量分多高。
+#    修的是用户实测到的"精分"：AI 写着"不合你的口味"，卡片却挂着 0.57 匹配度。
+MIN_PERSONAL_SCORE = 0.15
+# 全部被门槛拦掉时的兜底条数（宁可选"最不坏"的，也不能空屏）
+FALLBACK_KEEP = 10
 
 
 def blend_and_sort(items: list[Any], personal_scores: dict[int, float],
@@ -57,7 +63,8 @@ def blend_and_sort(items: list[Any], personal_scores: dict[int, float],
 
 
 def rerank(conn: sqlite3.Connection, user_id: int, items: list[Any],
-           get_repo_id, get_score) -> tuple[list[Any], dict[str, Any]]:
+           get_repo_id, get_score, min_keep: int = 8,
+           ) -> tuple[list[Any], dict[str, Any]]:
     """对候选做本地精排；没有模型就原样返回。"""
     info: dict[str, Any] = {"applied": False}
     if not items:
@@ -72,11 +79,61 @@ def rerank(conn: sqlite3.Connection, user_id: int, items: list[Any],
         info["reason"] = "no_embeddings_or_model_failed"
         return items, info
 
-    ranked = blend_and_sort(items, scores, get_repo_id, get_score)
+    # ⭐ 排除用户自己的仓库：自建仓库是**兴趣证据**，不是推荐内容
+    #    （用户当然知道自己写的项目；它们出现在 Feed 里既无信息量，还会拿满分霸占头部）
+    try:
+        owned = {
+            r["full_name"] for r in conn.execute(
+                "SELECT full_name FROM github_footprint "
+                "WHERE user_id = ? AND source = 'owned'", (user_id,))
+        }
+        if owned and items:
+            marks = ",".join("?" * len(items))
+            name_by_id = {
+                int(r["id"]): r["full_name"]
+                for r in conn.execute(
+                    f"SELECT id, full_name FROM repos WHERE id IN ({marks})",
+                    tuple(int(get_repo_id(it)) for it in items))
+            }
+            items = [it for it in items
+                     if name_by_id.get(int(get_repo_id(it)), "") not in owned]
+    except Exception:
+        pass
+
+    # ⭐ 硬门槛：个人分低于阈值的一律踢掉（不再参与排序，也不会出现在 Feed 头部）
+    kept = [it for it in items
+            if scores.get(get_repo_id(it), 0.0) >= MIN_PERSONAL_SCORE]
+    dropped = len(items) - len(kept)
+    if not kept:
+        # 全军覆没说明这批候选与该用户完全不对路：宁可给"最接近的几条"，
+        # 也不能返回空屏（空屏会让用户以为服务坏了）。
+        kept = sorted(items, key=lambda it: -scores.get(get_repo_id(it), 0.0))[:FALLBACK_KEEP]
+        info["fallback"] = True
+
+    ranked = blend_and_sort(kept, scores, get_repo_id, get_score)
+
+    # ⭐ 尾部兜底：门槛踢完后如果不够一页，用"个人分最高的被踢项"补满（排在末尾）。
+    #    目的：头部保持干净（不合口味的一律不出现），但不至于一页只有两三条。
+    filled = 0
+    if len(ranked) < min_keep:
+        passed = {get_repo_id(it) for it in ranked}
+        filler = sorted(
+            (it for it in items if get_repo_id(it) not in passed),
+            key=lambda it: -scores.get(get_repo_id(it), 0.0),
+        )[: max(0, min_keep - len(ranked))]
+        ranked = ranked + filler
+        filled = len(filler)
+
     info.update({
         "applied": True,
         "scored": len(scores),
+        "kept": len(kept),
+        "dropped": dropped,
+        "filled_from_dropped": filled,
+        "threshold": MIN_PERSONAL_SCORE,
         "blend": BLEND_PERSONAL,
+        "scores": {get_repo_id(it): round(scores.get(get_repo_id(it), 0.0), 3)
+                   for it in ranked},
         "top": [{"repo_id": get_repo_id(it),
                  "personal": round(scores.get(get_repo_id(it), -1), 3)}
                 for it in ranked[:5]],

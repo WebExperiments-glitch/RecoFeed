@@ -71,7 +71,6 @@ const FeedCard: FC<Props> = ({
   onRegisterEl,
 }) => {
   const rootRef = useRef<HTMLDivElement | null>(null)
-  const scrollRef = useRef<HTMLDivElement | null>(null)
   const enterAtRef = useRef<number>(0)
   const maxDepthRef = useRef<number>(0)
   const [liked, setLiked] = useState(false)
@@ -135,7 +134,21 @@ const FeedCard: FC<Props> = ({
   useEffect(() => {
     if (isActive) {
       enterAtRef.current = Date.now()
-      maxDepthRef.current = 0
+      // ⭐ 卡片现在由内容撑开（不再有卡片内滚动），
+      //    所以"读完比例"改用「卡片有多少落在视口内」来估算 ——
+      //    100% 落在视口 = 完整看过。
+      const el = rootRef.current
+      maxDepthRef.current = el
+        ? Math.max(
+            0.15,
+            Math.min(
+              1,
+              (Math.min(window.innerHeight, el.offsetHeight) -
+                Math.max(0, -el.getBoundingClientRect().top)) /
+                Math.max(1, el.offsetHeight),
+            ),
+          )
+        : 0.5
       return
     }
     // 离开时结算（enterAt 为 0 说明还没激活过，不报）
@@ -157,18 +170,7 @@ const FeedCard: FC<Props> = ({
   }, [isActive, item.repo_id, channelKey, index, batchId])
 
   // ── 卡片内部滚动 → 记录最大滚动深度 ──
-  const onScroll = (): void => {
-    const el = scrollRef.current
-    if (!el) return
-    const max = el.scrollHeight - el.clientHeight
-    if (max <= 4) {
-      // 内容不足一屏，视为已完整浏览
-      maxDepthRef.current = Math.max(maxDepthRef.current, 1)
-      return
-    }
-    const d = el.scrollTop / max
-    if (d > maxDepthRef.current) maxDepthRef.current = d
-  }
+
 
   const toggleLike = async (): Promise<void> => {
     const next = !liked
@@ -186,7 +188,7 @@ const FeedCard: FC<Props> = ({
     <section
       ref={rootRef}
       data-index={index}
-      className={`snap-card relative h-full w-full shrink-0 ${
+      className={`snap-card relative w-full shrink-0 ${
         index % 2 === 0 ? 'bg-canvas' : 'bg-parchment'
       }`}
     >
@@ -194,27 +196,12 @@ const FeedCard: FC<Props> = ({
           卡片内部有 truncate / 长描述 / 标签换行，
           任何一处在窄屏下算出超宽都会把整页撑出横向滚动条，
           表现为"右侧内容被裁掉"。 */}
-      <div className="h-full w-full px-4 pt-14 pb-4 flex flex-col overflow-hidden">
-        {/* ── 内容区：整块垂直居中 + 限宽 ──
-             布局纪律（踩了三轮坑）：
-               ❌ 只把正文区居中，「身份+理由」留在顶部 → 理由胶囊被孤立，两处空洞拆开内容
-               ❌ 内容顶对齐 + 指标/操作钉在底部 → 内容与页脚之间出现"太平洋留白"
-                  （尤其桌面矮宽窗口，1080×600 下一个空洞四五百像素）
-               ✅ 现在：**所有内容（身份→理由→描述→摘要→标签→信息行→操作行）
-                  作为一个整体**居中；间距统一 14px；内容限宽 560px 居中。
-                  用 m-auto 而不是 justify-center：内容超高时 auto margin 归零，
-                  顶部不会被裁（justify-center + overflow 会吃掉第一行）。 */}
-        <div
-          ref={scrollRef}
-          onScroll={onScroll}
-          className="flex-1 min-h-0 overflow-y-auto pr-1"
-        >
-          <div className="min-h-full flex flex-col">
-            <div className="m-auto w-full max-w-[560px] flex flex-col gap-3.5">
-              {/* ↑ max-w-[560px]：桌面端收窄内容区居中。
-                  1080px 宽的行长会让眼睛频繁换行、阅读体验崩掉；
-                  560px ≈ 中文 40 字/行。移动端 390px 不受影响。 */}
-              {/* ── 仓库身份 ── */}
+      <div className="w-full px-4 py-5 flex flex-col gap-3">
+              {/* 结构说明（踩了四轮坑后定稿）：
+                  卡片由**内容撑开**，不再固定高度、不再有卡片内滚动区 ——
+                  于是"标签到指标之间隔一条银河系"这类空洞从根上消失。
+                  卡片间距统一 12px(gap-3)。顶栏给 Feed 容器留一次 pt 就行。 */}
+
               <div className="flex items-start gap-3">
                 <div
                   className="h-11 w-11 shrink-0 rounded-pearl flex items-center justify-center
@@ -349,8 +336,17 @@ const FeedCard: FC<Props> = ({
                   📓 {lang}
                 </span>
               )}
-              <span className="chip h-6 bg-pearl text-ink-muted border border-hairline">
-                🎯 {item.score.toFixed(2)}
+              {/* ⚠️ 展示个人分而不是结构化质量分：
+                  否则会出现「AI 说不合你的口味 / 卡片却写着 0.57」的自相矛盾 */}
+              <span
+                className="chip h-6 bg-pearl text-ink-muted border border-hairline"
+                title={
+                  item.personal_score != null
+                    ? `个人模型匹配度 ${item.personal_score.toFixed(2)}｜质量分 ${item.score.toFixed(2)}`
+                    : `质量分 ${item.score.toFixed(2)}`
+                }
+              >
+                🎯 {(item.personal_score ?? item.score).toFixed(2)}
               </span>
               {lic && (
                 <span className={`chip h-6 border ${lic.cls}`}>{lic.text}</span>
@@ -367,13 +363,6 @@ const FeedCard: FC<Props> = ({
                  刷卡的主线动作是"上下滑"，全宽蓝条会把视线硬拽下去；
                  缩成一行、次级操作靠右，主动权还给用户。 */}
             <div className="flex items-center gap-2 pt-3 border-t border-divider">
-              <button
-                className="btn-primary h-9 px-4 text-[13px]"
-                onClick={() => onOpenDetail(item)}
-              >
-                查看详情 ›
-              </button>
-              <div className="flex-1" />
               <button
                 className={`h-9 w-9 shrink-0 rounded-full flex items-center justify-center
                            border transition-colors active:scale-95 ${
@@ -397,10 +386,15 @@ const FeedCard: FC<Props> = ({
               >
                 <BanIcon />
               </button>
+              {/* CTA 固定在卡片右下角（不再独占一行、也不挡视线） */}
+              <div className="flex-1" />
+              <button
+                className="btn-primary h-9 px-4 text-[13px]"
+                onClick={() => onOpenDetail(item)}
+              >
+                查看详情 ›
+              </button>
             </div>
-            </div>
-          </div>
-        </div>
 
       </div>
     </section>

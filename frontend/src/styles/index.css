@@ -129,6 +129,8 @@
   /* 竖向吸附滚动容器（Feed 的主滚动轴） */
   .snap-feed {
     scroll-snap-type: y mandatory;
+    /* 卡片改为内容撑开高度后仍需避开固定顶栏（52px） */
+    scroll-padding-top: 52px;
     -webkit-overflow-scrolling: touch;
   }
   .snap-card {
