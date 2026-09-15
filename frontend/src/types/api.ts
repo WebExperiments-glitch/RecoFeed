@@ -29,6 +29,9 @@ export interface RepoStats {
   forgotten: number
 }
 
+/** 信息流分档：all=全部 / hot=热门（≥1000 星）/ gem=遗珠（<1000 星） */
+export type FeedMode = 'all' | 'hot' | 'gem'
+
 export interface FeedItem {
   repo_id: number
   full_name: string

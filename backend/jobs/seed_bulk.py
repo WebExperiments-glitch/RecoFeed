@@ -85,6 +85,23 @@ BASE_QUERIES: list[str] = [
 ]
 
 
+# ⭐ 遗珠档查询：**低星**仓库（50~999 星）。
+#    产品定位就是"让被埋没的好项目浮上来"，所以语料库必须有一批低星仓库；
+#    之前只跑了 stars:>2000 的查询，结果 2361 个里只有 60 个是 <1000 星，
+#    "遗珠"筛选形同虚设。
+GEM_QUERIES: list[str] = [
+    f"stars:50..999 {q}" for q in [
+        "topic:tts", "topic:voice-cloning", "topic:llm", "topic:agent",
+        "topic:rag", "topic:mcp", "topic:embedding", "topic:inference-engine",
+        "topic:quantization", "topic:fine-tuning", "topic:speech-synthesis",
+        "topic:audio-processing", "topic:music-generation", "topic:web-scraping",
+        "topic:cli-tool", "topic:developer-tools", "topic:automation",
+        "topic:desktop-app", "topic:self-hosted", "topic:dataset",
+        "language:python", "language:typescript", "language:rust", "language:go",
+    ]
+]
+
+
 def _token(explicit: str | None) -> str:
     if explicit:
         return explicit
@@ -124,13 +141,17 @@ def main() -> None:
                     help="请求间隔秒（认证后上限 30 次/分钟，2.2s 稳妥）")
     ap.add_argument("--token", default=None, help="GitHub 令牌（默认取 gh auth token）")
     ap.add_argument("--embed", action="store_true", help="抓完重建向量与画像")
+    ap.add_argument("--set", choices=["main", "gem"], default="main",
+                    help="main=高星广度（默认）；gem=遗珠档（50~999 星）")
     args = ap.parse_args()
 
     token = _token(args.token)
     print(f"令牌：{'已获取' if token else '❌ 未获取（限流 10 次/分钟，速度会慢）'}")
 
     # 关键词 = 基础查询 + 用户画像标签（让扩库也带一点个人倾向）
-    queries = list(BASE_QUERIES)
+    queries = list(GEM_QUERIES if args.set == "gem" else BASE_QUERIES)
+    if args.set == "gem":
+        print("模式：遗珠档（50~999 星）—— 填充「遗珠」筛选的候选池")
     try:
         with get_conn() as conn:
             rows = conn.execute(

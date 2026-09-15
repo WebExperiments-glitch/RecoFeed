@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FC } from 'react'
-import type { FeedItem, FeedMeta, SessionUser } from '@/types/api'
+import type { FeedItem, FeedMeta, FeedMode, SessionUser } from '@/types/api'
 import { dislikeRepo, getFeed, getMe, logout, syncGithub } from '@/lib/api'
 import { flush, setEventUser } from '@/lib/events'
 import {
@@ -53,6 +53,8 @@ const App: FC = () => {
   const [activeItem, setActiveItem] = useState<FeedItem | null>(null)
   /** 侧滑抽屉（项目详情）是否展开 */
   const [drawerOpen, setDrawerOpen] = useState(false)
+  /** 信息流分档：全部 / 热门 / 遗珠 */
+  const [feedMode, setFeedMode] = useState<FeedMode>('all')
 
   const fetchingRef = useRef(false)
   /** 首屏加载失败的重试计数（后端瞬时抖动不该直接甩一屏报错） */
@@ -66,7 +68,7 @@ const App: FC = () => {
     fetchingRef.current = true
     setLoading(true)
     try {
-      const res = await getFeed(userId, PAGE_SIZE)
+      const res = await getFeed(userId, PAGE_SIZE, undefined, feedMode)
       if (res.items.length === 0 && replace) {
         setFatal('后端没有返回内容，请确认服务已启动且数据库已灌入种子数据')
       } else {
@@ -279,6 +281,11 @@ python3 app.py`}
         queueSize={meta?.queue_size ?? 0}
         source={meta?.source ?? 'queue'}
         user={user}
+        mode={feedMode}
+        onChangeMode={(m) => {
+          setFeedMode(m)
+          setItems([])          // 换档先清空，避免旧档的卡片混在列表里
+        }}
         onOpenSearch={() => setShowSearch(true)}
         onOpenProfile={() => setShowProfile(true)}
       />
