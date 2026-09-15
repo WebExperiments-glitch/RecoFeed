@@ -1,13 +1,11 @@
-# 项目：RecoFeed
+# RecoFeed · 遗珠推荐
 
 > **抖音有视频，我有仓库。**
 > 让被遗忘的优质开源项目，重新被人看见。
 
----
-
-## ⚠️ 本项目为开发者内部版本（Beta）
-
-产品处于高速提交期，请勿用于有危险的地方，出现问题本项目不背任何风险。
+[![License: MIT](https://img.shields.io/badge/License-MIT-0066cc.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.13-0066cc.svg)](https://www.python.org/)
+[![React](https://img.shields.io/badge/React-19-0066cc.svg)](https://react.dev/)
 
 ---
 
@@ -15,152 +13,89 @@
 
 GitHub 从不主动推流。全世界有大量开发者写完仓库就再没推广过，优质的仓库最终因为无人访问而落灰。
 
-RecoFeed 用**抖音的信息流范式**来做**开源仓库的发现**：
+RecoFeed 用**抖音的信息流范式**来做**开源仓库的发现** —— 竖滑刷卡、停留时长作为核心信号、按兴趣投喂，但把推荐对象从"热门爆款"换成**被埋没的遗珠**。
 
 | 抖音 | RecoFeed |
 |---|---|
 | 视频 | GitHub 仓库 |
-| 上下滑动刷 | 竖向吸附滚动（一次一张） |
-| 双击点赞 | 本地点赞 |
-| 收藏 | Star on GitHub |
+| 上下滑 | 竖向吸附滚动（一屏一仓库） |
+| 双击点赞 | 收藏（本地） |
 | 停留时长 / 完播 | `dwell_ms` + `scroll_depth` 埋点 |
-| 不感兴趣 | 梯度标签惩罚 |
-| 推荐算法 | 多路召回 + TF-IDF 标签 + 用户画像 |
+| 不感兴趣 | 梯度标签惩罚（区分"讨厌这个仓库"和"讨厌这个类别"） |
+| 推荐算法 | 多路召回 + 三层标签 + **本地双塔模型** + 本地重排 |
 | 评论区 | Issues / PRs / Discussions → 词云 |
-| 用户数据 | 完全本地，隐私自有 |
-
-**核心理念**：商业平台让热门更热，我们要让**遗珠浮上来**。
+| 用户数据 | 完全本地，数据不出本机 |
 
 ---
 
 ## 核心特性
 
-### 信息流
-- 🎞️ **仿抖音上下滑动**：CSS `scroll-snap` 一次一张，`IntersectionObserver` 判定 active
-- 🍎 **Apple 设计系统 UI**：单一 Action Blue (#0066cc) 交互色、白/羊皮纸交替满幅瓦片、SF Pro 负字距标题、胶囊按钮、唯一投影只给图像（详见 `docs/` 的设计规范）
-- 🌏 **卡片即中文**：标题 + 简介自动翻译（整页合并 1 次 LLM 调用），README 支持「看原文 / 看中文」
+### 🎞️ 一屏一仓库的信息流
+- 竖向吸附滚动，卡片由内容撑开、**卡内左右两列**（文字内容 + 数据面板），桌面与移动端自适应
+- 停留时长与滚动深度全量埋点 —— 它们是推荐系统最核心的输入
+- **分档浏览**：全部 / **热门**（≥1000 星）/ **遗珠**（<1000 星，本项目的立身之本）
 
-### 推荐机制
-- 🏷️ **TF-IDF 三层标签体系**：README 核心 ×1.0 / 用户足迹 ×0.6 / Issue 词云 ×0.3
-- 👤 **多层用户画像**：能力圈（自建仓库）×1.0 / 兴趣圈（Star）×0.6 / 注意力圈（完读）×0.3
-- ⭐ **GitHub 实证圈（最强信号）**：见下节 —— 登录后拉取你**自己做的仓库**与**点星的仓库**
-- 🧊 **缓存池 + 定向补货**：Feed 先读队列；水位低时按画像决定「抓什么」，而不是无脑抓 trending
-- 🔍 **搜索干预**：搜索词作临时标签，4:1 混合，5 次刷新后归零
-- 👎 **梯度负反馈**：区分「讨厌这个仓库」与「讨厌这个类别」
-- 🌱 **渐进式冷启动**：Trending 诱饵 → 70/30 混合 → 纯算法
-- 💎 **遗珠标记**：低曝光 + 高口碑的仓库会被打上「💎 遗珠」并优先获得曝光
-
-### 数据获取
-- 🕷️ **Scrapling 爬虫**：用户在画像面板自建关键词 → 一键去 GitHub 抓真实仓库 → 入库 → 直接入队
-- 🔄 **真实数据种子**：`jobs/seed_real.py` 从 GitHub Search API 拉取真实仓库重灌数据库
-- 🔒 **本地优先**：数据存本地 SQLite，隐私自有
-
----
-
-## GitHub 实证圈：最强的兴趣信号
-
-「刷到卡片停了一会儿」只是弱证据。**你亲手在写的仓库**才是铁证。
-
-登录 GitHub 后，RecoFeed 会拉取两类数据并赋予权重（数值可调，见 `backend/core/config.py`）：
-
-| 来源 | 判据 | 权重 |
-|---|---|---|
-| **自建仓库** | 最近推送 ≤7 天 | **0.50** |
-| | ≤30 天 | 0.20 |
-| | ≤90 天 / ≤180 天 / ≤1 年 / 更久 | 0.12 / 0.08 / 0.05 / 0.03 |
-| **点星仓库** | 按仓库星数排名第 1 | **0.40** |
-| | 第 10 名 / 第 20 名 | 0.30 / 0.20 |
-| | 第 50 / 100 / 300 名 | 0.12 / 0.08 / 0.05 |
-
-- **自建仓库整体高于点星仓库**（0.5 > 0.4）—— 用户亲手做的东西优先
-- 进入画像时整体乘 `GITHUB_SIGNAL_BOOST = 2.0`（"猛推"的量化开关）
-- 这些仓库的 GitHub topics 会成为**补货方向的优先查询词**，驱动爬虫多抓同类项目
-
-登录方式两种：① GitHub OAuth 授权（需自建 OAuth App，见下）；② **个人访问令牌直连**（登录页粘贴即可，无需建 App）。
-
----
-
-## 本地双塔推荐模型（为每个人训练一个专属微型 AI）
-
-RecoFeed 不止「规则排序」—— 它在你电脑上为每个用户训练一个**专属的微型推荐模型**：
-
+### 🗼 本地双塔推荐（你的专属微型模型）
 | 组件 | 做法 | 产出 |
 |---|---|---|
-| 🗼 物品塔 Item Tower | 本地 embedding 模型（魔搭 `BAAI/bge-small-zh-v1.5`，512 维，CPU 毫秒级）把全部仓库的 README 摘要 + topics + 标签向量化 | SQLite BLOB 存储，零外部依赖 |
-| 🗼 用户塔 User Tower | 自建仓库 ×0.5 + 点星 ×0.4 + 深读/点赞 ×0.3，加权聚合成「用户语义向量」 | 512 维用户向量 |
-| 🧠 个人微调 | torch 训练 `512→128→1` MLP（CPU **0.16 秒** / 100 epoch） | `personal_model_u{id}.pth`，仅 271 KB |
-| 🎯 本地重排 | 结构化分 30% + 个人模型分 70% 融合排序 | 「热门的 firecrawl 被判 0 分，而你在写的 indexTTS 同类项目被顶上来」 |
+| 物品塔 | 本地 embedding 模型（魔搭 `BAAI/bge-small-zh-v1.5`，512 维，CPU）把全部仓库的 README 摘要 + topics + 标签向量化 | SQLite BLOB，**零外部向量库依赖** |
+| 用户塔 | 自建仓库 ×0.5 + 点星 ×0.4 + 深读/点赞 ×0.3 加权聚合成用户语义向量 | 512 维用户向量 |
+| 个人微调 | torch 训练 `512→128→1` MLP（CPU **0.2~0.6 秒** / 100 epoch） | `personal_model_u{id}.pth`，**仅 271 KB** |
+| 本地重排 | 个人分 70% + 结构化分 30%，并设**个人分硬门槛**（低于阈值直接踢出头部） | 头部永远是"你会喜欢的"，不看星数 |
 
-一键训练：`python backend/jobs/train_personal_model.py --user <id>`
+为什么这么小的模型能工作：语义理解由冻结的 embedding 承担，MLP 只学"在这个已理解语义的空间里，你的口味边界长什么样" —— 个性化所需的参数量远小于通用理解。
 
-实测（真实账号）：留出集 **AUC 0.803 / 准确率 0.793**；重排把 `deepseek-harness`、`UI-TARS-desktop` 顶到前二，而热门的 `firecrawl` 被模型判 **0 分**降权 —— **它学的是"你"，不是"大家"**。
+### 💡 LLM 解释层（大模型做小模型做不到的事）
+- **推荐理由**：一页 10 张卡片**合并成 1 次调用**，生成"为什么推荐给你"，并接收个人模型打分以保持口径一致
+- **画像归纳**：把标签 + 实证圈归纳成一句技术画像，并**自己揪出**残留的噪声词（写入黑名单，后续构建画像时真正剔除）
+- 两者都按**画像指纹**缓存（指纹含语料规模与模型版本），画像/模型一变即自动失效
 
-### 机制有效性验证
-数字人类实验（20 轮真实 API 交互 + numpy 逻辑回归预测检验）→ [`docs/simulation_report.md`](docs/simulation_report.md)：
-画像对齐 0.514→0.698、命中率峰值 0.70、AUC 0.781。
+### 🏷️ 标签体系（三层权重 + 白名单闸门）
+- 三层权重：README 核心 ×1.0 / 用户足迹 ×0.6 / Issues 词云 ×0.3
+- **技术性白名单闸门**：英文标签必须有技术依据才保留 —— 命中技术词典 / 命中该仓库的 GitHub topics / 命中语料库自建词表（10,000+ 词）/ 具备技术形态（`gpt4`、`voice-cloning`）
+- 200+ 词噪声表（README 套话 / 通用名词 / 元信息 / 中文套话），在**提取源头 + 画像 + 卡片展示**三层生效
+
+### 🕷️ 数据获取
+- **关键词爬虫**（Scrapling）：在画像面板自建关键词，一键抓真实仓库入库入队
+- **批量扩库**：`jobs/seed_bulk.py` 支持 `--set main`（高星广度）与 `--set gem`（50~999 星遗珠档）
+- 当前语料库：**3,616 个真实仓库**（热门 2,301 / 遗珠 1,315），随仓库提供
+
+### 🔐 GitHub 登录与实证圈
+- OAuth 授权码流 + PAT 令牌直连两种方式，会话 30 天
+- 登录后拉取**自建仓库**（≤7 天推送 0.5 → 越久越低）与**点星仓库**（按星数排名 0.4~0.05），
+  进入画像时整体 ×2.0 放大 —— 用户亲手做的东西必须主导推荐
+- 实证仓库会**回灌语料库**（用户自己的项目与点星的项目必须可被推荐）
+- 推荐时排除"已有关系"的对象：自建 / 点星 / 站内收藏 / 点赞
+
+### 🇨🇳 中文体验
+- 卡片标题 + 简介批量翻译（整页合并 1 次调用），README 支持看原文 / 看中文
+- **真译文校验**：免费模型偶尔原样回吐原文，会被判为"翻译失败"，而不是把同一句话显示两遍
 
 ---
 
-## 机制有效性验证（数字人类实验）
+## 实测指标
 
-推荐系统最容易自嗨。所以我们造了一个"数字人类"来验：
-
-```bash
-python backend/jobs/ml_simulate.py --rounds 20
-```
-
-- 给它明确的兴趣权重（声音克隆 / 本地推理 / Agent…），让它**像真人一样**决定停留时长、点赞、收藏、不感兴趣（含 8% 好奇心随机探索）
-- 全程走**真实 HTTP API**，不碰内部函数
-- 用 numpy 手写逻辑回归做**预测有效性**检验
-
-**20 轮实验结果**（完整报告 → [`docs/simulation_report.md`](docs/simulation_report.md)）：
-
-| 指标 | 结果 |
+| 指标 | 数值 |
 |---|---|
-| 画像对齐度（系统学到的画像 vs 真实兴趣） | 0.514 → 峰值 **0.698** |
-| Feed 兴趣匹配度 | 冷启动 0.103 → 峰值 **0.347**（第 11 轮） |
-| 命中率（匹配度 ≥0.25 的卡片占比） | 峰值 **0.70** |
-| 逻辑回归留出集 **AUC** | **0.781**（准确率 0.775） |
-| 模型自学出的高权重维度 | `python` `llm` `voice` `audio` `agent` `tts` —— 正是实验设定的兴趣 |
+| 个人模型留出集 AUC | **0.837**（语料 3,616、证据仓库 52） |
+| 训练耗时 / 模型体积 | 0.2~0.6 秒 / 100 epoch，**271 KB** |
+| 数字人类实验（20 轮真实 API 交互） | 画像对齐 0.514→0.698、命中率峰值 0.70、AUC 0.781 → [`docs/simulation_report.md`](docs/simulation_report.md) |
+| 卡片标签质量 | 平均 4.2 个/仓库，65% 有 ≥3 个，无标签仅 6% |
 
-**结论：机制有效**。同时暴露了一个真实瓶颈 —— 中后段匹配度回落，原因是**语料库只有 258 个仓库，高匹配的仓库被刷完了**；这恰好对应系统设计里的另一半（Scrapling 爬虫定向补货）。语料越大，学习曲线的高位平台越长。
-
----
-
-## 技术栈
-
-### 前端
-```
-React 19 + TypeScript 5.7 + Vite 6
-├─ 样式      Tailwind CSS 3.4（Apple 设计系统：浅色瓷面 + 单一蓝色）
-├─ 状态      React Hooks（无重型状态库）
-├─ 埋点      IntersectionObserver 曝光 + dwell 深读判定
-└─ 本地存储  LocalStorage（会话令牌 / 游客标记 / i18n）
-```
-
-### 后端
-```
-Python 3.13 + FastAPI
-├─ 分词      jieba（TF-IDF / TextRank + 技术词典回填）
-├─ 数据库    SQLite（WAL + busy_timeout，单文件零配置）
-├─ 爬虫      Scrapling（浏览器指纹伪装，抓 GitHub）
-├─ 翻译      多模型级联：OpenRouter 免费档 ×3 → DeepSeek 付费兜底
-└─ 认证      GitHub OAuth / PAT + 会话表
-```
+> 数字人类实验：造一个有明确兴趣权重的"数字人类"，像真人一样决定停留/点赞/收藏，全程走真实 HTTP API，
+> 再用 numpy 手写逻辑回归做预测有效性检验。**离线指标容易被小语料美化** ——
+> 扩库后 AUC 曾从 0.803 掉到 0.588（负例更"像"了，任务变难），补足证据后又回到 0.837。
 
 ---
 
 ## 快速开始
 
-### 方式 A：Windows 一键启动（推荐）
+### Windows 一键启动（推荐）
+双击项目根目录 **`start-all.bat`** —— 后端 (8000) 与前端 (5173) 各开一个独立窗口。停止用 `stop-all.bat`。
 
-项目根目录双击 **`start-all.bat`** —— 后端 (8000) 与前端 (5173) 各开一个独立窗口启动。
-停止双击 **`stop-all.bat`**。
-
-### 方式 B：手动启动
-
-**后端（端口 8000）**
+### 手动启动
 ```bash
+# ① 后端（端口 8000）
 cd backend
 python -m venv .venv
 .venv\Scripts\activate            # macOS/Linux: source .venv/bin/activate
@@ -168,65 +103,63 @@ pip install -r requirements.txt
 
 python app.py                     # → http://127.0.0.1:8000
 ```
-
-**前端（端口 5173，另开终端）**
 ```bash
+# ② 前端（端口 5173，另开终端）
 cd frontend
 pnpm install
-pnpm dev                          # 已配置代理：/api → http://127.0.0.1:8000
+pnpm dev                          # → http://localhost:5173
 ```
 
-打开 http://localhost:5173 即可开刷。
+**数据集已随仓库提供**（`backend/data/recofeed.seed.db`，3,616 个真实 GitHub 仓库，含向量）。
+首次启动时若运行库不存在会自动从快照初始化，开箱即用。
 
-> **数据库已随仓库提供**（`backend/data/recofeed.db`，含 **258 个真实 GitHub 仓库**）。
-> 若想换一批数据：`python backend/jobs/seed_real.py --reset`（从 GitHub 实时拉取，README 走 jsdelivr CDN 补齐）。
->
-> ⚠️ **提交数据集前请先脱敏**：`recofeed.db` 同时是运行中的数据库，会含登录令牌与会话。
-> 跑一次 `python scripts/sanitize_dataset.py`（清空 `users.github_token` 与 `auth_sessions`）再提交，
-> 别让凭据进 git 历史。
+想换一批数据：
+```bash
+python backend/jobs/seed_bulk.py --target 2000            # 高星广度
+python backend/jobs/seed_bulk.py --set gem --target 1200  # 遗珠档（50~999 星）
+python backend/jobs/retag.py                              # 重刷标签（自动更新技术词表）
+```
+
+---
+
+## 本地模型与个性化
+
+embedding 模型首次使用时自动从**魔搭**下载（约 180MB，缓存在 `backend/models/`，不入库）：
+
+```bash
+# 一键训练你的个人模型（向量化 → 用户塔 → 微调 → 体检）
+python backend/jobs/train_personal_model.py --user <用户id>
+```
+
+训练完成后 Feed 自动启用本地重排（`meta.ml_rerank` 会透出打分与门槛统计）。
 
 ---
 
 ## 配置
 
-### 1. LLM（中文翻译，可选）
-
-不配置也能跑，只是卡片不会显示中文翻译。填 `backend/core/llm_local.json`（**已 gitignore，不要提交**）：
-
+### LLM（翻译 + 解释层）
+填 `backend/core/llm_local.json`（**已 gitignore，请勿提交**）：
 ```json
 {
   "openrouter_api_key": "sk-or-v1-…",
   "deepseek_api_key": "sk-…"
 }
 ```
+级联链：OpenRouter 免费档 3 个模型 → DeepSeek 付费兜底（日限额 15，防止烧钱包）。
+本地限流默认**关闭**（想打开：环境变量 `RECOFEED_LLM_LIMIT=1`）；用量始终记账，`GET /api/translate/status` 可查。
 
-级联链：OpenRouter 免费档 3 个模型 → DeepSeek 付费兜底（独立日限额 15 次，防止烧钱包）。
+### GitHub 登录
+**方式 A：个人访问令牌（30 秒）** —— 登录页粘贴令牌，权限勾 `read:user` + `public_repo`。
 
-### 2. GitHub 登录（可选）
-
-**方式 A：个人访问令牌（30 秒）**
-GitHub → Settings → Developer settings → Personal access tokens → 勾选 `read:user` + `public_repo` → 复制令牌 → 粘贴到登录页。
-
-**方式 B：OAuth App（正式）**
-GitHub → Settings → Developer settings → **OAuth Apps → New OAuth App**：
+**方式 B：OAuth App（正式）** —— GitHub → Settings → Developer settings → OAuth Apps → New OAuth App：
 
 | 字段 | 值 |
 |---|---|
-| Application name | `RecoFeed` |
 | Homepage URL | `http://localhost:5173` |
-| **Authorization callback URL** | `http://localhost:8000/api/auth/github/callback` |
+| Authorization callback URL | `http://127.0.0.1:8000/api/auth/github/callback` |
 
-把 Client ID / Client secret 填入 `backend/core/auth_local.json`（**已 gitignore**）：
-
-```json
-{
-  "github_client_id": "Ov23li…",
-  "github_client_secret": "…",
-  "auth_secret": "换成一个随机字符串"
-}
-```
-
-重启后端 → 登录页会出现「使用 GitHub 登录」按钮。
+把 Client ID / Secret 填入 `backend/core/auth_local.json`（**已 gitignore**）。
+⚠️ 回调地址必须与上面完全一致；三个复选框都不要勾，尤其 *Expire user access tokens*（需 refresh 流程，后端未实现）。
 
 ---
 
@@ -234,41 +167,46 @@ GitHub → Settings → Developer settings → **OAuth Apps → New OAuth App**�
 
 ```
 RecoFeed/
-├── start-all.bat / stop-all.bat      # Windows 一键启停
+├── start-all.bat / stop-all.bat       # Windows 一键启停
 ├── docs/
-│   ├── API.md                        # ⭐ 完整 API 参考（30+ 接口）
-│   ├── simulation_report.md          # ⭐ 机制有效性验证报告（自动生成）
-│   ├── simulation_results.json       # 实验原始指标
-│   ├── screenshots/                  # 界面截图
-│   ├── schema.sql                    # 数据库 Schema（15 张表）
-│   ├── 调研报告.md / .html            # 抖音等平台推流机制调研
-│   ├── 推流引擎设计.md / .html         # 抖音机制 → 代码的翻译
-│   └── 算法实现规格.md / .html         # 可直接编码的规格（含实测验证）
+│   ├── API.md                         # ⭐ 完整 API 参考（40+ 接口）
+│   ├── simulation_report.md           # ⭐ 机制有效性验证报告（自动生成）
+│   ├── screenshots/                   # 界面截图
+│   ├── schema.sql                     # 数据库 Schema
+│   └── 调研报告 / 推流引擎设计 / 算法实现规格（.md + .html）
+├── scripts/
+│   ├── export_dataset.py              # ⭐ 导出脱敏数据集快照（提交前必跑）
+│   └── sanitize_dataset.py            # 原地脱敏运行库（应急）
 ├── backend/
-│   ├── app.py                        # 入口（FastAPI + 静态前端）
-│   ├── core/config.py                # ⭐ 全部可调参数（限流/权重/权重公式）
+│   ├── app.py                         # FastAPI 入口（含数据集自动初始化）
+│   ├── core/config.py                 # ⭐ 全部可调参数（权重/限流/OAuth）
 │   ├── api/
-│   │   ├── routes.py                 # 全部路由
-│   │   ├── feed_service.py           # Feed 组装
-│   │   ├── search_service.py         # 搜索（FTS5 + 个性化）
-│   │   ├── crawl_service.py          # ⭐ Scrapling 关键词爬虫
-│   │   ├── auth_service.py           # ⭐ GitHub OAuth / 会话 / 实证圈同步
-│   │   └── translate_service.py      # 多模型级联翻译 + 缓存 + 限流
-│   ├── recall/ rank/ pool/ tags/ profile/   # 召回 / 排序 / 流量池 / 标签 / 画像
-│   ├── db/                           # SQLite 连接（WAL + busy_timeout）
-│   ├── dict/                         # 技术词典 / 停用词 / 领域方向词
-│   ├── data/recofeed.db              # ⭐ 数据集（258 个真实仓库，随仓库提供）
+│   │   ├── routes.py                  # 全部路由
+│   │   ├── feed_service.py  search_service.py
+│   │   ├── crawl_service.py           # Scrapling 关键词爬虫
+│   │   ├── auth_service.py            # ⭐ GitHub OAuth / 实证圈同步 / 加权重
+│   │   ├── insight_service.py         # ⭐ LLM 解释器 + 画像归纳 + 噪声黑名单
+│   │   └── translate_service.py       # 模型级联翻译（含真译文校验）
+│   ├── ml/                            # ⭐ 本地双塔
+│   │   ├── embedder.py                #   物品塔（bge 512 维 → SQLite BLOB）
+│   │   ├── user_model.py              #   用户塔 + 个人 MLP + 打分
+│   │   ├── rerank.py                  #   本地重排（融合排序 + 硬门槛 + 排除已收藏）
+│   │   └── sklearn_lite.py            #   无 torch 环境的 LSA 兜底
+│   ├── recall/ rank/ pool/ tags/ user_profile/
+│   ├── dict/                          # 技术词典 / 噪声表 / 领域词 / 自建技术词表
+│   ├── data/recofeed.seed.db          # ⭐ 数据集（3,616 仓库，随仓库提供）
 │   └── jobs/
-│       ├── seed_real.py              # ⭐ 从 GitHub 拉真实仓库重灌
-│       ├── ml_simulate.py            # ⭐ 数字人类实验（机制有效性验证）
-│       ├── enrich_readme.py          # README 补齐 + 标签重提
-│       └── seed_data.py / simulate.py / stress_200.py
+│       ├── seed_bulk.py               # ⭐ 批量扩库（main / gem 两档）
+│       ├── retag.py                   # ⭐ 重刷标签 + 自动生成技术词表
+│       ├── train_personal_model.py    # ⭐ 训练个人模型
+│       ├── ml_simulate.py             # ⭐ 数字人类实验
+│       └── seed_real.py / enrich_readme.py / simulate.py / stress_200.py
 └── frontend/
     └── src/
-        ├── components/               # FeedCard / DetailSheet / ProfilePanel / LoginGate …
-        ├── lib/                      # api / events / session / format
-        ├── styles/index.css          # Apple 设计系统基元
-        └── types/api.ts              # 与后端逐字对齐的契约类型
+        ├── components/                # FeedCard / SidePanel(抽屉) / ProfilePanel / LoginGate …
+        ├── lib/                       # api / events / session / format
+        ├── styles/index.css           # Apple 设计系统基元
+        └── types/api.ts               # 与后端逐字对齐的契约类型
 ```
 
 ---
@@ -277,17 +215,16 @@ RecoFeed/
 
 ### 推荐得分
 ```
-推荐得分 = 预测行为概率 × 行为价值权重
-
-行为权重：收藏(Star) > 复访 > 铁粉互动 > 5 秒完播 > 整体完播 > 评论 > 点赞 > 转发
+最终分 = 0.7 × 个人模型分 + 0.3 × 结构化分          （两者各自 min-max 归一再融合）
+约束：个人分 < 0.15 → 直接踢出（不看星数、不看质量分）
+      过门槛不足一页 → 用"个人分最高的被踢项"补满尾部（头部严格、尾部放宽）
+      已有关系的对象（自建 / 点星 / 收藏 / 点赞）永不出现
 ```
 
-### 三层标签权重
-| 层级 | 数据源 | 权重 |
-|---|---|---|
-| 第一层 | README 项目核心 | ×1.0 |
-| 第二层 | 用户 Star / 完读 | ×0.6 |
-| 第三层 | Issues / PRs 热词 | ×0.3 |
+### 补货方向优先级
+```
+用户自定义关键词 > GitHub 实证圈话题 > 高转化标签 > 画像 Top 标签 > 领域方向词
+```
 
 ### 冷启动三阶段
 | 阶段 | 位置 | 策略 |
@@ -296,57 +233,51 @@ RecoFeed/
 | 2 | 第 6~20 个 | 70% Trending + 30% 冷门池 |
 | 3 | 第 21 个起 | 100% 算法推荐 |
 
-### 补货方向的优先级（`feed/refill.py`）
-```
-用户自定义关键词  >  GitHub 实证圈话题  >  高转化标签  >  画像 Top 标签  >  领域方向词
-```
-
 ---
 
 ## 界面截图
 
-| Feed（Apple 浅色瓦片） | 画像面板（含爬虫入口） | 详情页 |
+| 信息流（含分档切换） | 遗珠档 | 侧滑抽屉（README 全文） |
 |---|---|---|
-| ![feed](docs/screenshots/final3.png) | ![panel](docs/screenshots/panel.png) | ![detail](docs/screenshots/detail.png) |
+| ![feed](docs/screenshots/tags-clean.png) | ![gem](docs/screenshots/gem-mode.png) | ![drawer](docs/screenshots/drawer.png) |
 
-| GitHub 实证圈（真实登录后的权重） | 登录页 | 游客模式 |
+| GitHub 登录 | 画像面板（含 AI 归纳） | 详情面板 |
 |---|---|---|
-| ![profile](docs/screenshots/profile-github.png) | ![login](docs/screenshots/login.png) | ![guest](docs/screenshots/guest.png) |
+| ![login](docs/screenshots/login.png) | ![profile](docs/screenshots/profile-clean.png) | ![detail](docs/screenshots/detail.png) |
 
-> 上图是真实账号登录后的画像面板：自建的 `RecoFeed`（8 小时前推送）拿到 **0.50**，
-> `rvc-xpu`（14 天前）**0.20**；点星榜按星数排名 —— 第 1 名 `build-your-own-x`（★547k）**0.40**、
-> 第 2 名 `deepseek-harness` **0.37**、第 4 名 `ComfyUI` **0.34**。规则即文档。
+---
+
+## 数据集说明
+
+`backend/data/recofeed.seed.db` 是**脱敏快照**，随仓库提供：
+
+- **运行库** `recofeed.db`：本机数据（令牌 / 会话 / 用户行为 / 个人画像），**已 gitignore，永不提交**
+- **快照** `recofeed.seed.db`：由 `scripts/export_dataset.py` 导出，自动清空 `github_token`、`auth_sessions`、
+  用户行为、事件、队列、个人画像，最后 VACUUM
+
+> ⚠️ 提交数据集前**必须**先跑 `python scripts/export_dataset.py`，否则运行库里的登录令牌会进入 git 历史。
 
 ---
 
 ## 数据来源与合规
 
-- 仓库元数据来自 **GitHub 官方 API**（Search API / 用户仓库 / 星标列表）
-- 严格遵守 GitHub API 速率限制（令牌认证后 5000 次/小时；未认证搜索 10 次/分钟）
+- 仓库元数据来自 **GitHub 官方 API**（Search API / 用户仓库 / 星标列表），遵守速率限制
 - README 通过 **jsdelivr CDN** 读取，减轻 GitHub 压力
 - 所有推荐结果均指向 GitHub 原仓库，**不镜像、不转载仓库内容**
 - 登录只请求 `read:user` 权限，**只读公开数据，不修改任何内容**
-- 会话令牌与 API 密钥均只存本机（`backend/core/*_local.json` 已 gitignore）
+- API 密钥与会话令牌只存本机（`backend/core/*_local.json` 已 gitignore）
 
 ---
 
 ## 开源协议
 
-本项目采用 **MIT License**。
-
-参考的第三方项目协议保持不变，详见 `THIRD_PARTY_NOTICES.md`。
+本项目采用 **MIT License**。第三方项目协议保持不变，详见 `THIRD_PARTY_NOTICES.md`。
 
 ---
 
 ## 贡献
 
-见 [CONTRIBUTING.md](CONTRIBUTING.md)。
-
-**特别欢迎**：
-- 新的召回通路设计
-- 中文技术标签词典扩充
-- 冷启动策略优化
-- 新的评估指标（欢迎扩展 `jobs/ml_simulate.py`）
+见 [CONTRIBUTING.md](CONTRIBUTING.md)。**特别欢迎**：新的召回通路、中文技术词典扩充、冷启动策略、评估指标（欢迎扩展 `jobs/ml_simulate.py`）。
 
 ---
 

@@ -39,6 +39,7 @@
 | `search_query` | str | — | 搜索干预（4:1 混入搜索结果） |
 | `session_languages` | str | — | 本次会话已出现的语言（逗号分隔，用于打散） |
 | `session_owners` | str | — | 本次会话已出现的作者（逗号分隔，用于打散） |
+| `mode` | str | `all` | 分档：`all` 全部 / `hot` 热门（≥1000 星）/ `gem` 遗珠（<1000 星） |
 
 **响应**
 ```json
@@ -57,7 +58,16 @@
     "reason": "根据你的浏览兴趣挑选",
     "forgotten_score": 0.12,
     "pushed_at_gh": "2026-08-01 12:00:00",
-    "url": "https://github.com/open-mmlab/Amphion"
+    "url": "https://github.com/open-mmlab/Amphion",
+
+    "personal_score": 0.997,
+    "readme_excerpt": "Amphion is a toolkit for Audio, Music, and Speech Generation…",
+    "stats": {
+      "forks": 46, "open_issues": 3, "size_kb": 85000,
+      "created_at": "2024-01-01 00:00:00", "pushed_at": "2026-09-10 00:00:00",
+      "has_ci": true, "has_tests": false, "homepage": null,
+      "quality": 0.79, "velocity": 0.98, "freshness": 0.02, "forgotten": 0.77
+    }
   }],
   "meta": {
     "source": "queue",
@@ -69,6 +79,10 @@
 }
 ```
 `meta.source`：`queue` = 全部来自缓存池；`queue+realtime` = 补货没跟上、实时兜底；`realtime_search` = 纯实时。
+
+`meta.ml_rerank`：本地重排统计（`applied` / `scored` / `kept` / `dropped` / `threshold` / `filled_from_dropped`）。
+`personal_score`：个人模型匹配度（**卡片上的 🎯 用它**，而不是结构化质量分 —— 两把尺子不能混用）。
+`stats`：仓库自身客观指标（概览 + 打分明细），与 `personal_score` 口径不同。
 
 ### `GET /api/stats/queue`
 队列水位与最近补货记录。
@@ -298,20 +312,81 @@ GitHub 回调：换 token → 建/取用户 → 签发会话 → 302 回前端
 
 ---
 
-## 八、调试
+## 八、本地双塔模型（个人专属推荐）
+
+> 全部计算在本机完成：向量存 SQLite BLOB（不需要 faiss / chroma）；个人模型是一个 271KB 的 `.pth`。
+
+### `GET /api/ml/status?user_id=1`
+向量库 / 个人模型 / 证据量 / 后台任务进度。
+
+```json
+{
+  "embeddings": { "count": 3616, "dim": 512, "model": "bge-small-zh-v1.5", "backend": "st" },
+  "user_model": { "exists": true, "size_kb": 271.2, "epochs": 100,
+                  "metrics": { "auc_holdout": 0.837, "acc_holdout": 0.769, "seconds": 0.56 } },
+  "evidence": { "count": 52 },
+  "tasks": { "embed": { "running": false }, "train": { "running": false } }
+}
+```
+
+### `POST /api/ml/embed?force=false&limit=`
+物品塔向量化（后台跑，进度看 `/api/ml/status`）。首次运行会自动从魔搭下载 embedding 模型（约 180MB）。
+
+### `POST /api/ml/train?user_id=1&epochs=100`
+训练个人模型并返回体检指标（CPU 通常 < 1 秒）。
+
+### `POST /api/ml/explain`
+⭐ LLM 推荐理由：一批卡片**合并成 1 次调用**，结果按 `(用户, 卡片, 画像指纹)` 缓存。
+
+```json
+{ "user_id": 1, "repo_ids": [16, 6, 19] }
+```
+→ `{ "explanations": { "16": "你在做 TTS 和 RVC，这个项目正好把语音识别、克隆、混音串起来了" }, "generated": 3, "model": "…" }`
+
+### `GET /api/ml/recall?user_id=1&k=20`
+向量召回演示：用用户向量在全部仓库里检索最相近的 k 个，并附个人模型打分。
+
+---
+
+## 九、LLM 画像归纳
+
+### `GET /api/user/profile/summary?user_id=1`
+读取缓存的画像归纳（画像指纹变了会返回 `null`）。
+
+### `POST /api/user/profile/summarize?user_id=1&force=false`
+⭐ 让 LLM 归纳画像（1 次调用）。
+
+```json
+{
+  "ok": true,
+  "summary": "专注 TTS/语音克隆与 AI Agent 的开发者，涉足 RVC 声线转换、Intel XPU 加速与 Vocaloid 调音工具",
+  "interests": ["text-to-speech", "voice-cloning", "rvc", "ai-agents", "mcp", "intel-xpu"],
+  "noise": ["ai", "python", "typescript", "热度"],
+  "noise_applied": 4,
+  "cached": false,
+  "model": "deepseek-flash"
+}
+```
+> `noise` 里的词会被写入**噪声黑名单**（表 `profile_noise`），后续构建画像时真正剔除 ——
+> AI 的判断要生效，不是只展示。
+
+---
+
+## 十、调试
 
 ### `GET /api/stats/pool`
 流量池分布与晋级统计（观察冷启动 → 爆款池的流转）。
 
 ---
 
-## 九、限流与防护一览
+## 十一、限流与防护一览
 
 | 机制 | 参数 | 说明 |
 |---|---|---|
-| 免费模型限流 | 12 次/分钟、45 次/天 | 本地先行拒绝，不打上游 |
-| DeepSeek 付费兜底 | 15 次/天 | 独立限额，防止烧钱包 |
-| 模型冷却 | 单模型 120s / 全局 45s | 收到 429 后 |
+| 本地限流总开关 | `LLM_LOCAL_RATE_LIMIT_ENABLED` | **默认关闭**（不限流）；`RECOFEED_LLM_LIMIT=1` 可恢复 |
+| 免费模型限流（开关打开时） | 120 次/分钟、2000 次/天 | 本地先行拒绝，不打上游 |
+| DeepSeek 付费兜底 | **15 次/天**（始终生效） | 独立限额，防止烧钱包 |
+| 模型冷却（反应式） | 单模型 429 后 60s / 全模型 429 后全局 20s | 不是提前拒绝，只在撞到上游限流时短暂避让 |
 | 爬虫频控 | 60s 一次 | GitHub search 限流 10/min |
 | 关键词上限 | 12 个/用户 | — |
-| SQLite 写锁等待 | `busy_timeout=30s` | 前后台并发写同一库 |
+| SQLite | 自动提交 + `busy_timeout=30s` | 规避"读→写升级死锁"（该死锁不走超时，见 `db/connection.py` 注释） |
