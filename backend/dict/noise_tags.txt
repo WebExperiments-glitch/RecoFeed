@@ -646,3 +646,34 @@ readable
 maintainable
 customizable
 configurable
+
+# ── ⑩ 数据驱动补充（按全库标签频率统计出的通用名词）──
+# 依据：scripts 统计全库 3616 个仓库在通过白名单后仍高频出现的通用词，
+# 它们出现在卡片上时读起来就是"README 词渣"，不构成兴趣方向。
+team
+download
+downloads
+downloader
+prompt
+prompts
+image
+images
+text
+texts
+language
+languages
+native
+powered
+local
+search
+model
+models
+page
+pages
+files
+project
+projects
+apps
+websites
+tutorial-code
+tutorial-exercises

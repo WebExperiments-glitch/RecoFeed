@@ -258,7 +258,8 @@ ON CONFLICT(full_name) DO UPDATE SET
 def _insert_repo(conn: sqlite3.Connection, r: dict[str, Any]) -> int:
     """入库并返回 repo id。已存在（full_name 冲突）时刷新数据。"""
     rng = random.Random(r["github_id"] or r["full_name"])
-    tags = extract_readme_tags(r["readme"], topk=50)
+    tags = extract_readme_tags(r["readme"], topk=50,
+                                   topics=r["topics"], name=r["name"])
     for t in r["topics"][:8]:
         t = str(t).strip().lower()
         if t and len(t) > 1 and t not in tags:
@@ -331,7 +332,8 @@ def _bg_enrich_readmes(repo_ids: list[int]) -> None:
         for (rid, _f, _b, topics), (_r, md) in zip(todo, fetched):
             if not md:
                 continue
-            tags = extract_readme_tags(md, topk=50)
+            tags = extract_readme_tags(md, topk=50,
+                                       topics=r["topics"], name=r["name"])
             for t in topics[:8]:
                 t = str(t).strip().lower()
                 if t and len(t) > 1 and t not in tags:

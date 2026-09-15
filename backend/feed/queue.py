@@ -25,6 +25,8 @@
 from __future__ import annotations
 
 import json
+
+from tags.extractor import display_tags
 import sqlite3
 import uuid
 from datetime import datetime, timezone
@@ -218,11 +220,16 @@ def row_to_dict(row: sqlite3.Row) -> dict:
         "language": row["language"],
         "stars": row["stars"],
         "topics": topics[:8] if isinstance(topics, list) else [],
+        # ⭐ 卡片标签必须过滤：噪声表 + 仓库名自标签 + 技术性白名单闸门。
+        #    之前直接输出 tags_json，用户看到的是 anything / track / checkpoint
+        #    甚至仓库名本身（efficientsam）—— 画像层过滤了，展示层却漏了。
         "tags": [
             {"tag": k, "weight": round(float(v), 3)}
-            for k, v in sorted(
-                tags.items(), key=lambda kv: -float(kv[1])
-            )[:12]
+            for k, v in display_tags(
+                tags, name=row["name"], owner=row["owner"],
+                topics=topics if isinstance(topics, list) else [],
+                limit=8,
+            )
         ],
         "license_spdx": row["license_spdx"],
         "license_risk": row["license_risk"],
