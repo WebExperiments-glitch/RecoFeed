@@ -16,6 +16,8 @@ interface Props {
   onDislike: (item: FeedItem) => void
   /** 滑到接近底部时触发加载下一页 */
   onReachEnd: () => void
+  /** 当前正在看的卡片发生变化（桌面端右侧信息面板用） */
+  onActiveChange?: (item: FeedItem | null) => void
 }
 
 /**
@@ -35,6 +37,7 @@ const FeedList: FC<Props> = ({
   onOpenDetail,
   onDislike,
   onReachEnd,
+  onActiveChange,
 }) => {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const cardEls = useRef<Map<number, HTMLDivElement>>(new Map())
@@ -170,6 +173,7 @@ const FeedList: FC<Props> = ({
   // ── 曝光埋点：卡片首次成为 active 时报一次 ──
   useEffect(() => {
     const item = items[activeIndex]
+    onActiveChange?.(item ?? null)
     if (!item) return
     if (impressedRef.current.has(item.repo_id)) return
     impressedRef.current.add(item.repo_id)
@@ -179,7 +183,7 @@ const FeedList: FC<Props> = ({
       item.channels[0],
       meta?.refill?.batch_id,
     )
-  }, [activeIndex, items, meta])
+  }, [activeIndex, items, meta, onActiveChange])
 
   // ── 接近底部 → 预加载 ──
   useEffect(() => {
