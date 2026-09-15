@@ -12,6 +12,7 @@ import type {
   CrawlResult,
   CustomKeywordUpsert,
   ExplainResponse,
+  FeedMode,
   FeedResponse,
   HotResponse,
   KeywordsResponse,
@@ -89,10 +90,13 @@ export function getFeed(
   userId: number,
   limit = 10,
   searchQuery?: string,
+  /** all=全部 / hot=热门（≥1000 星）/ gem=遗珠（<1000 星） */
+  mode: FeedMode = 'all',
 ): Promise<FeedResponse> {
   const p = new URLSearchParams({
     user_id: String(userId),
     limit: String(limit),
+    mode,
   })
   if (searchQuery) p.set('search_query', searchQuery)
   return request<FeedResponse>(`/feed?${p}`)

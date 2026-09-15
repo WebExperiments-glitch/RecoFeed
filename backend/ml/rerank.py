@@ -79,24 +79,42 @@ def rerank(conn: sqlite3.Connection, user_id: int, items: list[Any],
         info["reason"] = "no_embeddings_or_model_failed"
         return items, info
 
-    # ⭐ 排除用户自己的仓库：自建仓库是**兴趣证据**，不是推荐内容
-    #    （用户当然知道自己写的项目；它们出现在 Feed 里既无信息量，还会拿满分霸占头部）
+    # ⭐ 排除"已经有关系的仓库"，绝不推荐给用户：
+    #    ① 自建仓库 —— 兴趣证据，不是内容（用户当然知道自己写的项目）
+    #    ② 已收藏/点过星的 —— 用户已经收下了，再推就是浪费一次曝光（用户原话：
+    #       "给我推荐我收藏的仓库干嘛"）
+    #    ③ 站内点赞过的同理
     try:
-        owned = {
-            r["full_name"] for r in conn.execute(
-                "SELECT full_name FROM github_footprint "
-                "WHERE user_id = ? AND source = 'owned'", (user_id,))
-        }
-        if owned and items:
+        exclude_names: set[str] = set()
+        for r in conn.execute(
+            "SELECT full_name FROM github_footprint WHERE user_id = ?", (user_id,)
+        ):
+            exclude_names.add(str(r["full_name"]))
+
+        exclude_ids: set[int] = set()
+        for tbl in ("stars", "likes"):
+            try:
+                for r in conn.execute(
+                    f"SELECT repo_id FROM {tbl} WHERE user_id = ?", (user_id,)
+                ):
+                    exclude_ids.add(int(r["repo_id"]))
+            except Exception:
+                pass
+
+        if items:
             marks = ",".join("?" * len(items))
             name_by_id = {
-                int(r["id"]): r["full_name"]
+                int(r["id"]): str(r["full_name"])
                 for r in conn.execute(
                     f"SELECT id, full_name FROM repos WHERE id IN ({marks})",
                     tuple(int(get_repo_id(it)) for it in items))
             }
-            items = [it for it in items
-                     if name_by_id.get(int(get_repo_id(it)), "") not in owned]
+            items = [
+                it for it in items
+                if int(get_repo_id(it)) not in exclude_ids
+                and name_by_id.get(int(get_repo_id(it)), "") not in exclude_names
+            ]
+            info["excluded_engaged"] = True
     except Exception:
         pass
 

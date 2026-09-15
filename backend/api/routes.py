@@ -161,6 +161,7 @@ def get_feed(
         None, description="本次会话已出现的语言，逗号分隔"),
     session_owners: str | None = Query(
         None, description="本次会话已出现的作者，逗号分隔"),
+    mode: str = Query("all", description="all | hot（≥1000 星热门）| gem（<1000 星遗珠）"),
 ) -> dict[str, Any]:
     """拉取 Feed。
 
@@ -208,6 +209,32 @@ def get_feed(
         if ids:
             from api.translate_service import preheat_descriptions
             background_tasks.add_task(preheat_descriptions, ids)
+
+        # ── 热门 / 遗珠 分档（用户需求：热门=≥1000 星，遗珠=<1000 星）──
+        if mode in ("hot", "gem") and items:
+            try:
+                cond = "stars >= 1000" if mode == "hot" else "stars < 1000"
+                ids_set = {
+                    int(r["id"]) for r in conn.execute(
+                        f"SELECT id FROM repos WHERE {cond}")
+                }
+                items = [it for it in items if int(it.get("repo_id") or 0) in ids_set]
+            except Exception as e:  # noqa: BLE001
+                logging.getLogger("recofeed").warning("分档过滤失败：%s", e)
+
+        # 分档时多取候选（过滤会掉一批），保证一页仍是满的
+        if mode in ("hot", "gem"):
+            try:
+                from ml.user_model import model_path as _mp2
+                _has_model2 = _mp2(user_id).exists()
+            except Exception:
+                _has_model2 = False
+            if not _has_model2:
+                extra = get_queue_feed(conn, user_id, limit=limit)
+                have = {int(it.get("repo_id") or 0) for it in items}
+                for it in (extra.get("items") or []):
+                    if int(it.get("repo_id") or 0) not in have:
+                        items.append(it)
 
         # ── 富化：给卡片带一段 README 摘要 ──
         # 满屏卡片如果只有两行字，版面会显得空；摘要让信息密度正常，

@@ -1,10 +1,13 @@
 import type { FC } from 'react'
-import type { SessionUser } from '@/types/api'
+import type { FeedMode, SessionUser } from '@/types/api'
 
 interface Props {
   queueSize: number
   source: string
   user: SessionUser | null
+  /** 信息流分档：全部 / 热门（≥1000 星）/ 遗珠（<1000 星） */
+  mode: FeedMode
+  onChangeMode: (m: FeedMode) => void
   onOpenSearch: () => void
   onOpenProfile: () => void
 }
@@ -19,7 +22,15 @@ interface Props {
  *   用户能看到还有多少条待刷、是否在补货，
  *   而不是黑盒地"刷着刷着就没了"。
  */
-const TopBar: FC<Props> = ({ queueSize, source, user, onOpenSearch, onOpenProfile }) => {
+const TopBar: FC<Props> = ({
+  queueSize,
+  source,
+  user,
+  mode,
+  onChangeMode,
+  onOpenSearch,
+  onOpenProfile,
+}) => {
   const isRealtime = source.includes('realtime')
   return (
     <header className="absolute top-0 inset-x-0 z-30 safe-t">
@@ -32,6 +43,28 @@ const TopBar: FC<Props> = ({ queueSize, source, user, onOpenSearch, onOpenProfil
         </div>
 
         <div className="flex-1" />
+
+        {/* 分档切换：热门（≥1000 星）/ 遗珠（<1000 星）
+            遗珠是本产品的立身之本 —— 让被埋没的低星好项目浮上来 */}
+        <div className="flex items-center rounded-full bg-pearl border border-hairline p-0.5">
+          {([
+            ['all', '全部'],
+            ['hot', '热门'],
+            ['gem', '遗珠'],
+          ] as [FeedMode, string][]).map(([k, label]) => (
+            <button
+              key={k}
+              className={`h-6 px-2.5 rounded-full text-[11.5px] transition-colors ${
+                mode === k
+                  ? 'bg-accent text-white'
+                  : 'text-ink-muted hover:text-ink'
+              }`}
+              onClick={() => onChangeMode(k)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
 
         {/* 队列水位 —— 珍珠胶囊（button-pearl-capsule 语法） */}
         <div

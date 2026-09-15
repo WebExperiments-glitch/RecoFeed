@@ -368,11 +368,20 @@ const FeedCard: FC<Props> = ({
 
             {item.stats && (
               <div>
-                <div className="text-[11px] text-ink-faint mb-2">推荐系统怎么看你</div>
+                <div className="text-[11px] text-ink-faint mb-2">仓库画像（客观指标）</div>
                 <ScoreBar label="质量分" v={item.stats.quality} />
                 <ScoreBar label="活跃度" v={item.stats.velocity} />
                 <ScoreBar label="新鲜度" v={item.stats.freshness} />
                 <ScoreBar label="遗珠分" v={item.stats.forgotten} tone="gem" />
+                {/* ⚠️ 口径说明：用户实测反馈过"左边 🎯1.00、右边质量分 76 很诡异"——
+                    两个数根本不是一回事，必须写清楚，否则看起来像自相矛盾 */}
+                <p className="text-[10.5px] text-ink-faint mt-2 leading-relaxed">
+                  左上角的 🎯 是
+                  <span className="text-ink-soft">你的个人模型</span>
+                  给的匹配度（模型判断你会不会喜欢）；这四项是
+                  <span className="text-ink-soft">仓库自身</span>
+                  的客观指标。口径不同，不必互相对齐。
+                </p>
               </div>
             )}
 
@@ -387,8 +396,16 @@ const FeedCard: FC<Props> = ({
           </div>
         </div>
 
-        {/* ── 底部：操作（横跨整宽，CTA 在右下角）── */}
-        <div className="flex items-center gap-2 pt-3 border-t border-divider">
+        {/* ── 底部：操作 ──
+             用户要求三个按钮**紧挨着放最右边**：查看详情在左，收藏/不感兴趣在右。
+             （之前收藏在最左、详情在最右，隔了一整屏，视线要来回跳） */}
+        <div className="flex items-center justify-end gap-2 pt-3 border-t border-divider">
+          <button
+            className="btn-primary h-9 px-5 text-[13px]"
+            onClick={() => onOpenDetail(item)}
+          >
+            查看详情 ›
+          </button>
           <button
             className={`h-9 w-9 shrink-0 rounded-full flex items-center justify-center
                        border transition-colors active:scale-95 ${
@@ -397,8 +414,8 @@ const FeedCard: FC<Props> = ({
                            : 'bg-pearl border-hairline hover:bg-parchment'
                        }`}
             onClick={() => void toggleLike()}
-            title={liked ? '取消点赞' : '点赞'}
-            aria-label={liked ? '取消点赞' : '点赞'}
+            title={liked ? '取消收藏' : '收藏'}
+            aria-label={liked ? '取消收藏' : '收藏'}
           >
             {liked ? '💙' : '🤍'}
           </button>
@@ -411,13 +428,6 @@ const FeedCard: FC<Props> = ({
             aria-label="不感兴趣"
           >
             <BanIcon />
-          </button>
-          <div className="flex-1" />
-          <button
-            className="btn-primary h-9 px-5 text-[13px]"
-            onClick={() => onOpenDetail(item)}
-          >
-            查看详情 ›
           </button>
         </div>
       </div>
