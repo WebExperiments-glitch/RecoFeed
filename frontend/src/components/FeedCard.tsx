@@ -188,95 +188,107 @@ const FeedCard: FC<Props> = ({
     <section
       ref={rootRef}
       data-index={index}
-      className={`snap-card relative w-full shrink-0 ${
+      className={`snap-card relative h-full w-full shrink-0 ${
         index % 2 === 0 ? 'bg-canvas' : 'bg-parchment'
       }`}
     >
-      {/* ⚠️ overflow-hidden 必不可少。
-          卡片内部有 truncate / 长描述 / 标签换行，
-          任何一处在窄屏下算出超宽都会把整页撑出横向滚动条，
-          表现为"右侧内容被裁掉"。 */}
-      <div className="w-full px-4 py-5 flex flex-col gap-3">
-              {/* 结构说明（踩了四轮坑后定稿）：
-                  卡片由**内容撑开**，不再固定高度、不再有卡片内滚动区 ——
-                  于是"标签到指标之间隔一条银河系"这类空洞从根上消失。
-                  卡片间距统一 12px(gap-3)。顶栏给 Feed 容器留一次 pt 就行。 */}
+      {/* ⭐ 一个仓库 = 一页（满屏），但**内容用满宽度**：
+          桌面把卡片内部拆成两列（左：身份/理由/简介/标签；右：README 填满高度），
+          移动端两列折叠成一列。纵向填满（一页一仓库）、横向也不留空白。 */}
+      <div className="h-full w-full px-6 pt-16 pb-5 flex flex-col gap-4 overflow-hidden">
+        {/* ── 头部：仓库身份 + 指标（桌面右上）── */}
+        <div className="flex items-start gap-4">
+          <div
+            className="h-11 w-11 shrink-0 rounded-pearl flex items-center justify-center
+                       text-[17px] font-semibold"
+            style={{
+              background: `hsl(${hue} 52% 91%)`,
+              color: `hsl(${hue} 45% 30%)`,
+            }}
+          >
+            {item.owner.slice(0, 1).toUpperCase()}
+          </div>
+          <div className="min-w-0 flex-1">
+            <h2
+              className="text-[22px] font-semibold leading-tight text-ink tracking-[-0.6px] truncate"
+              title={zhName ? item.name : undefined}
+            >
+              {zhName || item.name}
+            </h2>
+            <p className="text-[12.5px] text-ink-muted mt-1 truncate">
+              {zhName ? `${item.name} · ` : ''}
+              {item.owner}
+              {item.pushed_at_gh ? ` · 更新于 ${timeAgo(item.pushed_at_gh)}` : ''}
+            </p>
+          </div>
 
-              <div className="flex items-start gap-3">
-                <div
-                  className="h-11 w-11 shrink-0 rounded-pearl flex items-center justify-center
-                             text-[17px] font-semibold"
-                  style={{
-                    background: `hsl(${hue} 52% 91%)`,
-                    color: `hsl(${hue} 45% 30%)`,
-                  }}
-                >
-                  {item.owner.slice(0, 1).toUpperCase()}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <h2
-                    className="text-[20px] font-semibold leading-tight text-ink tracking-[-0.55px] truncate"
-                    title={zhName ? item.name : undefined}
-                  >
-                    {zhName || item.name}
-                  </h2>
-                  <p className="text-[12px] text-ink-muted mt-1 truncate">
-                    {zhName ? `${item.name} · ` : ''}
-                    {item.owner}
-                    {item.pushed_at_gh ? ` · 更新于 ${timeAgo(item.pushed_at_gh)}` : ''}
-                  </p>
-                </div>
-                {/* 遗珠标记 —— 本项目的品牌符号（琥珀语义色，非交互） */}
-                {gem && (
-                  <span
-                    className="chip border border-gem/25 bg-gem/[0.08] text-gem animate-gem-pulse shrink-0"
-                    title="低曝光但口碑很好，可能被埋没了"
-                  >
-                    💎 遗珠
-                  </span>
-                )}
-              </div>
+          {gem && (
+            <span
+              className="chip border border-gem/25 bg-gem/[0.08] text-gem animate-gem-pulse shrink-0"
+              title="低曝光但口碑很好，可能被埋没了"
+            >
+              💎 遗珠
+            </span>
+          )}
 
-              {/* ── 推荐理由（Action Blue 唯一交互色之外的说明性胶囊）── */}
-              <div>
-                <span className="chip bg-accent/[0.07] text-accent border border-accent/15">
-                  {icon ? `${icon} ` : ''}
-                  {item.reason}
+          <div className="hidden lg:flex items-center gap-1.5 flex-wrap shrink-0 pt-1">
+            <span className="chip h-6 bg-pearl text-ink-muted border border-hairline">
+              ⭐ {formatStars(item.stars)}
+            </span>
+            {lang && (
+              <span className="chip h-6 bg-pearl text-ink-muted border border-hairline">
+                📓 {lang}
+              </span>
+            )}
+            <span
+              className="chip h-6 bg-pearl text-ink-muted border border-hairline"
+              title={
+                item.personal_score != null
+                  ? `个人模型匹配度 ${item.personal_score.toFixed(2)}｜质量分 ${item.score.toFixed(2)}`
+                  : `质量分 ${item.score.toFixed(2)}`
+              }
+            >
+              🎯 {(item.personal_score ?? item.score).toFixed(2)}
+            </span>
+            {lic && <span className={`chip h-6 border ${lic.cls}`}>{lic.text}</span>}
+          </div>
+        </div>
+
+        {/* ── 主体：桌面两列 / 移动单列 ── */}
+        <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-5">
+          <div className="flex-1 min-w-0 flex flex-col gap-3 overflow-y-auto pr-1">
+            <div>
+              <span className="chip bg-accent/[0.07] text-accent border border-accent/15">
+                {icon ? `${icon} ` : ''}
+                {item.reason}
+              </span>
+            </div>
+
+            {explanation && (
+              <div className="flex items-start gap-1.5">
+                <span className="text-[11px] text-accent shrink-0 mt-[2px]">💡 AI</span>
+                <span className="text-[13px] leading-[1.6] text-ink-soft">
+                  {explanation}
                 </span>
               </div>
-
-        {/* ── 💡 一句话推荐理由（LLM 生成）──
-             这是"小模型排序 + 大模型解释"分工里大模型的那一半：
-             排序由本地 MLP 做（毫秒级、零成本），解释需要语言能力 → 交给 LLM。 */}
-        {explanation && (
-          <div className="flex items-start gap-1.5">
-            <span className="text-[11px] text-accent shrink-0 mt-[1.5px]">💡 AI</span>
-            <span className="text-[12.5px] leading-[1.55] text-ink-soft">
-              {explanation}
-            </span>
-          </div>
-        )}
+            )}
 
             {item.description && (
               <div>
-                {/* ⚠️ 只有"真译文"才单独占一行；否则原文只显示一次。
-                    后端也已加校验（模型回吐原文时返回空），这里是前端兜底。 */}
                 {zhDescReal ? (
                   <>
-                    <p className="text-[15px] leading-[1.55] text-ink">
-                      {zhDescReal}
-                    </p>
-                    <p className="text-[11.5px] leading-relaxed text-ink-faint mt-1">
+                    <p className="text-[16px] leading-[1.65] text-ink">{zhDescReal}</p>
+                    <p className="text-[12px] leading-relaxed text-ink-faint mt-1.5">
                       {item.description}
                     </p>
                   </>
                 ) : (
                   <>
-                    <p className="text-[15px] leading-[1.55] text-ink-soft">
+                    <p className="text-[16px] leading-[1.65] text-ink-soft">
                       {item.description}
                     </p>
                     {!descAlreadyChinese && (
-                      <span className="text-[10.5px] text-ink-faint mt-1 inline-block animate-pulse">
+                      <span className="text-[10.5px] text-ink-faint mt-1.5 inline-block animate-pulse">
                         中文翻译生成中…
                       </span>
                     )}
@@ -285,19 +297,6 @@ const FeedCard: FC<Props> = ({
               </div>
             )}
 
-            {/* README 摘要 —— 让卡片有正常的信息密度（否则满屏只有两行字，
-                版面会显得空，读起来像"字隔得很远"）。
-                弱化成正文的补充材料：更小字号、更浅颜色、发丝线隔开。 */}
-            {item.readme_excerpt && (
-              <div className="border-t border-divider pt-3">
-                <div className="text-[10px] text-ink-faint mb-1.5">README 摘要</div>
-                <p className="text-[12.5px] leading-[1.65] text-ink-muted line-clamp-[7]">
-                  {item.readme_excerpt}
-                </p>
-              </div>
-            )}
-
-            {/* 标签 */}
             {topTags.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {topTags.map((t) => (
@@ -312,22 +311,17 @@ const FeedCard: FC<Props> = ({
               </div>
             )}
 
-            {/* topics —— 与算法标签去重后最多 4 个
-                （之前 detection/face/mtcnn 在标签行和话题行各出现一次）*/}
             {cleanTopics.length > 0 && (
               <div className="flex flex-wrap gap-x-2.5 gap-y-1">
                 {cleanTopics.map((t) => (
-                  <span key={t} className="text-[11px] text-ink-faint">
+                  <span key={t} className="text-[11.5px] text-ink-faint">
                     #{t}
                   </span>
                 ))}
               </div>
             )}
 
-            {/* ── 紧凑信息行：⭐星数 · 语言 · 🎯匹配度 · 许可证 ──
-                 之前是三个大矩形"地砖"占满一整行，还压不住版面；
-                 改一行小胶囊，把空间留给内容。 */}
-            <div className="flex items-center gap-1.5 flex-wrap">
+            <div className="flex lg:hidden items-center gap-1.5 flex-wrap">
               <span className="chip h-6 bg-pearl text-ink-muted border border-hairline">
                 ⭐ {formatStars(item.stars)}
               </span>
@@ -336,70 +330,131 @@ const FeedCard: FC<Props> = ({
                   📓 {lang}
                 </span>
               )}
-              {/* ⚠️ 展示个人分而不是结构化质量分：
-                  否则会出现「AI 说不合你的口味 / 卡片却写着 0.57」的自相矛盾 */}
-              <span
-                className="chip h-6 bg-pearl text-ink-muted border border-hairline"
-                title={
-                  item.personal_score != null
-                    ? `个人模型匹配度 ${item.personal_score.toFixed(2)}｜质量分 ${item.score.toFixed(2)}`
-                    : `质量分 ${item.score.toFixed(2)}`
-                }
-              >
+              <span className="chip h-6 bg-pearl text-ink-muted border border-hairline">
                 🎯 {(item.personal_score ?? item.score).toFixed(2)}
               </span>
-              {lic && (
-                <span className={`chip h-6 border ${lic.cls}`}>{lic.text}</span>
-              )}
-              {item.license_risk === 'caution' && (
-                <span className="text-[10.5px] text-risk-caution">商用需留意</span>
-              )}
-              {item.license_risk === 'danger' && (
-                <span className="text-[10.5px] text-risk-danger">协议受限</span>
-              )}
+              {lic && <span className={`chip h-6 border ${lic.cls}`}>{lic.text}</span>}
+            </div>
+          </div>
+
+          {/* ── 右列（桌面）：结构化数据面板 ──
+               ⚠️ 不依赖 README：扩库进来的仓库大多是"描述兜底"的伪 README，
+                 靠它填版面会塌陷（实测过：右列空白 → 中间又出现空洞）。
+                 这里用已在库里的结构化数据：概览 + 推荐系统打分明细。 */}
+          <div className="hidden lg:flex w-[38%] shrink-0 flex-col gap-4 min-h-0
+                          border-l border-divider pl-6 overflow-y-auto">
+            <div>
+              <div className="text-[11px] text-ink-faint mb-2">仓库概览</div>
+              <div className="grid grid-cols-3 gap-2">
+                <StatBox label="Star" value={formatStars(item.stars)} />
+                <StatBox label="Fork" value={formatStars(item.stats?.forks ?? 0)} />
+                <StatBox label="Issue" value={String(item.stats?.open_issues ?? 0)} />
+                <StatBox
+                  label="体积"
+                  value={
+                    item.stats ? `${Math.max(1, Math.round(item.stats.size_kb / 1024))} MB` : '—'
+                  }
+                />
+                <StatBox
+                  label="创建"
+                  value={item.stats?.created_at ? timeAgo(item.stats.created_at) : '—'}
+                />
+                <StatBox
+                  label="推送"
+                  value={item.stats?.pushed_at ? timeAgo(item.stats.pushed_at) : '—'}
+                />
+              </div>
             </div>
 
-            {/* ── 操作行：紧凑 pill + 圆形按钮，同一行，不占整宽 ──
-                 刷卡的主线动作是"上下滑"，全宽蓝条会把视线硬拽下去；
-                 缩成一行、次级操作靠右，主动权还给用户。 */}
-            <div className="flex items-center gap-2 pt-3 border-t border-divider">
-              <button
-                className={`h-9 w-9 shrink-0 rounded-full flex items-center justify-center
-                           border transition-colors active:scale-95 ${
-                             liked
-                               ? 'bg-accent/[0.08] border-accent/30'
-                               : 'bg-pearl border-hairline hover:bg-parchment'
-                           }`}
-                onClick={() => void toggleLike()}
-                title={liked ? '取消点赞' : '点赞'}
-                aria-label={liked ? '取消点赞' : '点赞'}
-              >
-                {liked ? '💙' : '🤍'}
-              </button>
-              <button
-                className="h-9 w-9 shrink-0 rounded-full flex items-center justify-center
-                           bg-pearl border border-hairline text-ink-muted
-                           hover:text-risk-danger transition-colors active:scale-95"
-                onClick={() => onDislike(item)}
-                title="不感兴趣"
-                aria-label="不感兴趣"
-              >
-                <BanIcon />
-              </button>
-              {/* CTA 固定在卡片右下角（不再独占一行、也不挡视线） */}
-              <div className="flex-1" />
-              <button
-                className="btn-primary h-9 px-4 text-[13px]"
-                onClick={() => onOpenDetail(item)}
-              >
-                查看详情 ›
-              </button>
-            </div>
+            {item.stats && (
+              <div>
+                <div className="text-[11px] text-ink-faint mb-2">推荐系统怎么看你</div>
+                <ScoreBar label="质量分" v={item.stats.quality} />
+                <ScoreBar label="活跃度" v={item.stats.velocity} />
+                <ScoreBar label="新鲜度" v={item.stats.freshness} />
+                <ScoreBar label="遗珠分" v={item.stats.forgotten} tone="gem" />
+              </div>
+            )}
 
+            {item.readme_excerpt && (
+              <div className="min-h-0 flex flex-col">
+                <div className="text-[11px] text-ink-faint mb-2">README 摘要</div>
+                <p className="text-[12.5px] leading-[1.75] text-ink-muted whitespace-pre-wrap">
+                  {item.readme_excerpt}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── 底部：操作（横跨整宽，CTA 在右下角）── */}
+        <div className="flex items-center gap-2 pt-3 border-t border-divider">
+          <button
+            className={`h-9 w-9 shrink-0 rounded-full flex items-center justify-center
+                       border transition-colors active:scale-95 ${
+                         liked
+                           ? 'bg-accent/[0.08] border-accent/30'
+                           : 'bg-pearl border-hairline hover:bg-parchment'
+                       }`}
+            onClick={() => void toggleLike()}
+            title={liked ? '取消点赞' : '点赞'}
+            aria-label={liked ? '取消点赞' : '点赞'}
+          >
+            {liked ? '💙' : '🤍'}
+          </button>
+          <button
+            className="h-9 w-9 shrink-0 rounded-full flex items-center justify-center
+                       bg-pearl border border-hairline text-ink-muted
+                       hover:text-risk-danger transition-colors active:scale-95"
+            onClick={() => onDislike(item)}
+            title="不感兴趣"
+            aria-label="不感兴趣"
+          >
+            <BanIcon />
+          </button>
+          <div className="flex-1" />
+          <button
+            className="btn-primary h-9 px-5 text-[13px]"
+            onClick={() => onOpenDetail(item)}
+          >
+            查看详情 ›
+          </button>
+        </div>
       </div>
     </section>
   )
 }
+
+
+/** 右列概览小方块 */
+const StatBox: FC<{ label: string; value: string }> = ({ label, value }) => (
+  <div className="rounded-pearl bg-parchment border border-hairline px-2.5 py-2 min-w-0">
+    <div className="text-[13px] font-semibold text-ink leading-none truncate">
+      {value}
+    </div>
+    <div className="text-[9.5px] text-ink-faint mt-1.5 leading-none">{label}</div>
+  </div>
+)
+
+/** 右列打分条（0~1） */
+const ScoreBar: FC<{ label: string; v: number; tone?: 'accent' | 'gem' }> = ({
+  label,
+  v,
+  tone = 'accent',
+}) => (
+  <div className="flex items-center gap-2 mb-1.5">
+    <span className="text-[11px] text-ink-muted w-14 shrink-0">{label}</span>
+    <span className="flex-1 h-1.5 rounded-full bg-parchment overflow-hidden">
+      <span
+        className={`block h-full rounded-full ${tone === 'gem' ? 'bg-gem' : 'bg-accent'}`}
+        style={{ width: `${Math.round(Math.max(0, Math.min(1, v)) * 100)}%` }}
+      />
+    </span>
+    <span className="text-[11px] text-ink-faint w-7 text-right shrink-0">
+      {Math.round(v * 100)}
+    </span>
+  </div>
+)
 
 const BanIcon: FC = () => (
   <svg

@@ -13,6 +13,22 @@ export interface RepoTag {
 }
 
 /** Feed 卡片（/api/feed 的 items[] 元素） */
+/** Feed 卡片附带的结构化概览与打分明细（桌面右列用） */
+export interface RepoStats {
+  forks: number
+  open_issues: number
+  size_kb: number
+  created_at: string | null
+  pushed_at: string | null
+  has_ci: boolean
+  has_tests: boolean
+  homepage: string | null
+  quality: number
+  velocity: number
+  freshness: number
+  forgotten: number
+}
+
 export interface FeedItem {
   repo_id: number
   full_name: string
@@ -23,6 +39,8 @@ export interface FeedItem {
   readme_excerpt?: string
   /** 个人模型打分（0~1）；有它时「匹配度」展示这个，而不是结构化质量分 */
   personal_score?: number
+  /** 仓库概览与打分明细（桌面端右列数据源） */
+  stats?: RepoStats
   language: string | null
   stars: number
   topics: string[]

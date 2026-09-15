@@ -36,6 +36,7 @@ from core.config import (
     LLM_CHAIN,
     LLM_DESC_MAX_CHARS,
     LLM_GLOBAL_COOLDOWN_SEC,
+    LLM_LOCAL_RATE_LIMIT_ENABLED,
     LLM_MAX_PER_DAY,
     LLM_MAX_PER_MINUTE,
     LLM_MAX_TOKENS,
@@ -141,25 +142,34 @@ def _deepseek_used_today(conn, now: float) -> int:
 
 
 def _quota_reject_reason(conn) -> str | None:
-    """检查免费额度与全局冷却。可消费返回 None（并计入一次免费用量）。"""
+    """检查免费额度与全局冷却。可消费返回 None（并计入一次免费用量）。
+
+    ⭐ LLM_LOCAL_RATE_LIMIT_ENABLED=False（默认）时**不做本地限流**：
+       有多少用多少，只保留"全局冷却"这一反应式保护 ——
+       它是上游已经 429 时才短暂停一下，避免对着必失败的接口猛冲，
+       不是提前拒绝，所以不影响"使劲造"。
+    """
     global _global_cooldown_until
     now = time.time()
 
     with _cooldown_lock:
         if now < _global_cooldown_until:
             return (
-                f"翻译服务冷却中（上游限流），"
-                f"约 {int(_global_cooldown_until - now)} 秒后自动恢复"
+                f"上游限流冷却中，约 {int(_global_cooldown_until - now)} 秒后自动恢复"
             )
+
+    # 仍然记账（/api/translate/status 会展示用量，方便观察上游实际承受力）
+    conn.execute(
+        "INSERT INTO llm_usage (ts, model) VALUES (?, 'free-slot')", (now,))
+
+    if not LLM_LOCAL_RATE_LIMIT_ENABLED:
+        return None
 
     n_min, n_day = _free_usage_counts(conn, now)
     if n_min >= LLM_MAX_PER_MINUTE:
         return f"每分钟翻译次数已达上限（{LLM_MAX_PER_MINUTE} 次/分钟），稍后再试"
     if n_day >= LLM_MAX_PER_DAY:
         return f"今日免费翻译额度已用完（{LLM_MAX_PER_DAY} 次/天），明天自动恢复"
-
-    conn.execute(
-        "INSERT INTO llm_usage (ts, model) VALUES (?, 'free-slot')", (now,))
     return None
 
 
