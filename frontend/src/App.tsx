@@ -284,11 +284,11 @@ python3 app.py`}
       />
 
       {/* ── 居中信息流（限宽一列）+ 侧滑抽屉 ──
-          信息流居中成一列（≈手机栏宽度），桌面两侧的留白由**按需滑出的抽屉**承担：
-          想刷时屏幕干净，想看细节划出抽屉读 README。
-          这样既不浪费宽度，也不破坏"刷"这个主行为。 */}
-      <div className="h-full w-full flex justify-center">
-        <div className="relative w-full max-w-[620px] h-full lg:border-x lg:border-divider">
+          卡片自己就是"一页"（满屏 + 用满宽度：卡内左右两列），
+          Feed 容器不再限宽居中 —— 不再有左右空白。
+          细节（README 全文）仍按需从右侧抽屉滑出。 */}
+      <div className="h-full w-full">
+        <div className="relative w-full h-full">
           <FeedList
             items={items}
             meta={meta}

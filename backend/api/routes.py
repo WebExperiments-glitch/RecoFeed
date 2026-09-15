@@ -217,11 +217,32 @@ def get_feed(
             if ids:
                 marks = ",".join("?" * len(ids))
                 ex_map: dict[int, str] = {}
+                st_map: dict[int, dict] = {}
                 for r in conn.execute(
-                    f"SELECT id, readme_md, description FROM repos WHERE id IN ({marks})",
+                    f"""SELECT id, readme_md, description, forks, open_issues, size_kb,
+                               created_at_gh, pushed_at_gh, has_ci, has_tests,
+                               quality_score, velocity_score, freshness_score,
+                               forgotten_score, homepage
+                        FROM repos WHERE id IN ({marks})""",
                     tuple(ids),
                 ):
                     ex = readme_excerpt(r["readme_md"])
+                    # 概览与打分：桌面端右列用它填满版面（不依赖 README，
+                    # 因为扩库进来的仓库大多只有"描述兜底"的伪 README）
+                    stats = {
+                        "forks": int(r["forks"] or 0),
+                        "open_issues": int(r["open_issues"] or 0),
+                        "size_kb": int(r["size_kb"] or 0),
+                        "created_at": r["created_at_gh"],
+                        "pushed_at": r["pushed_at_gh"],
+                        "has_ci": bool(r["has_ci"]),
+                        "has_tests": bool(r["has_tests"]),
+                        "homepage": r["homepage"],
+                        "quality": round(float(r["quality_score"] or 0), 2),
+                        "velocity": round(float(r["velocity_score"] or 0), 2),
+                        "freshness": round(float(r["freshness_score"] or 0), 2),
+                        "forgotten": round(float(r["forgotten_score"] or 0), 2),
+                    }
                     # ⚠️ 很多仓库的 readme_md 就是「描述兜底」（形如 "# 仓库名 + 描述"），
                     #    直接下发会让卡片上同一段字出现两遍 —— 用「包含」判断而不是前缀相等，
                     #    否则前缀会被仓库名顶掉而漏判。
@@ -229,8 +250,11 @@ def get_feed(
                     if ex and desc and desc[:40].lower() in ex.lower():
                         ex = ""
                     ex_map[int(r["id"])] = ex
+                    st_map[int(r["id"])] = stats
                 for it in items:
-                    it["readme_excerpt"] = ex_map.get(int(it.get("repo_id") or 0), "")
+                    rid = int(it.get("repo_id") or 0)
+                    it["readme_excerpt"] = ex_map.get(rid, "")
+                    it["stats"] = st_map.get(rid)
         except Exception as e:  # noqa: BLE001
             logging.getLogger("recofeed").warning("README 摘要富化失败：%s", e)
 

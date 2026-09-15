@@ -270,10 +270,20 @@ DEEPSEEK_MAX_PER_DAY = 15
 
 # 防护参数 —— 免费档限流（未充值账户官方限制：20 req/min、50 req/day）
 # 本地限额留出余量，超限直接拒绝，不打上游 API。
-LLM_MAX_PER_MINUTE = 12        # 每分钟最多 12 次（官方 20）
-LLM_MAX_PER_DAY = 45           # 每日最多 45 次（官方 50，仅统计免费模型调用）
-LLM_MODEL_COOLDOWN_SEC = 120   # 某模型收到 429 后的独享冷却
-LLM_GLOBAL_COOLDOWN_SEC = 45   # 免费模型全部 429 时的全局冷却（期内直接拒绝）
+# ⭐ 本地限流总开关（用户要求："免费模型不要限流了，你使劲造"）
+#    False = 不做本地限流，有多少用多少（用量仍会记账，接口状态里能看）。
+# ⚠️ 但真正卡上限的是**上游 OpenRouter 免费档**（约 20 次/分钟、50 次/天），
+#    本地放开后，撞到上游 429 就靠"模型轮换 + 429 冷却"顶着 —— 那是反应式保护，
+#    不是提前拒绝，所以放开是安全的（不会浪费请求，只是会换模型重试）。
+# 默认 False（不限流）；想重新打开本地闸门：RECOFEED_LLM_LIMIT=1
+LLM_LOCAL_RATE_LIMIT_ENABLED = os.getenv(
+    "RECOFEED_LLM_LIMIT", "0").strip().lower() in ("1", "true", "yes")
+
+# 下面四个只在 LLM_LOCAL_RATE_LIMIT=True 时生效；数值已放宽（原 12/45/120/45）
+LLM_MAX_PER_MINUTE = 120       # 每分钟上限（本地闸门，放开后仅作参考）
+LLM_MAX_PER_DAY = 2000         # 每日上限（本地闸门，放开后仅作参考）
+LLM_MODEL_COOLDOWN_SEC = 60    # 某模型收到 429 后的独享冷却（反应式，保留）
+LLM_GLOBAL_COOLDOWN_SEC = 20   # 免费模型全部 429 时的全局冷却（反应式，保留）
 LLM_TIMEOUT_SEC = 75.0         # 单模型请求超时（免费档推理偏慢）
 LLM_MAX_TOKENS = 2500          # 输出 token 上限
 LLM_DESC_MAX_CHARS = 400       # description 送翻的最大长度
