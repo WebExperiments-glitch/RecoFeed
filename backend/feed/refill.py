@@ -367,12 +367,18 @@ def pick_from_local_pool(
     plan: FetchPlan,
     *,
     need: int,
+    star_min: int | None = None,
+    star_max: int | None = None,
 ) -> list[int]:
     """按抓取计划，从本地仓库池里挑出该补的仓库 id。
 
     ⚠️ 这里刻意重复了召回/打分的一小部分逻辑，而不是直接调 build_feed：
        因为补货是"批量灌队列"，不需要满足单次 Feed 的打散约束，
        而且需要严格排除"已在队列里的"和"用户已互动的"。
+
+    star_min / star_max：**按星数档补货**（热门 ≥1000 / 遗珠 <1000）。
+       用户实测：切到"遗珠"档一片空白 —— 因为补货不区分星数，
+       队列里全是热门仓库，滤完就空了。这里让补货也认档。
     """
     if need <= 0:
         return []
@@ -425,12 +431,22 @@ def pick_from_local_pool(
     soft = recent - exclude
 
     # 按标签匹配度 + 遗珠优先 打分
+    # 星数档过滤（可选）：把 SQL 条件的拼装放在这里，避免在 Python 里二次扫全表
+    conds = ["r.is_archived = 0", "r.is_dead = 0"]
+    params: list[Any] = []
+    if star_min is not None:
+        conds.append("r.stars >= ?")
+        params.append(int(star_min))
+    if star_max is not None:
+        conds.append("r.stars <= ?")
+        params.append(int(star_max))
     rows = conn.execute(
-        """SELECT r.id, r.tags_json, r.topics, r.forgotten_score,
+        f"""SELECT r.id, r.tags_json, r.topics, r.forgotten_score,
                   r.quality_score, r.velocity_score, r.freshness_score,
                   r.language, r.stars
            FROM repos r
-           WHERE r.is_archived = 0 AND r.is_dead = 0"""
+           WHERE {' AND '.join(conds)}""",
+        tuple(params),
     ).fetchall()
 
     wanted = set(t.lower() for t in plan.queries)

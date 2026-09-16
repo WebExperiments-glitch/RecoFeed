@@ -72,6 +72,7 @@ from api.search_service import hot as search_hot
 from api.search_service import search as search_repos
 from api.search_service import suggest as search_suggest
 from core.config import (
+    QUEUE_TARGET_SIZE,
     COLD_START_MIN_TAGS,
     EVENT_WEIGHTS,
     SEARCH_DEFAULT_LIMIT,
@@ -204,37 +205,37 @@ def get_feed(
             items = payload["items"]
             result = payload
 
+        # ── 热门 / 遗珠 分档：**直接从本地池按星数档取货**，不走队列 ──
+        #    ⚠️ 为什么不用队列补货：补货的 need = target - queue_size，
+        #       而队列常被"全部"档填满 → need<=0 → 按档补货整段被跳过（实测空屏根因）。
+        #       分档是"浏览视图"，直接从 3616 个仓库的池子里按档取，可靠且不污染主队列。
+        if mode in ("hot", "gem"):
+            try:
+                from feed.refill import build_fetch_plan, pick_from_local_pool
+                from feed.service import _score_picked
+                from api.feed_service import candidate_to_dict
+                plan = build_fetch_plan(conn, user_id, queue_size=0)
+                picked = pick_from_local_pool(
+                    conn, user_id, plan, need=max(limit * 6, 40),
+                    star_min=1000 if mode == "hot" else None,
+                    star_max=999 if mode == "gem" else None,
+                )
+                cands = _score_picked(conn, user_id, picked, plan)
+                # 多取 2 倍：后面还有个人分门槛与"已收藏"排除，留出余量
+                items = [candidate_to_dict(c) for c in cands[: limit * 2]]
+                result = {
+                    "items": items,
+                    "meta": {"source": f"mode_{mode}",
+                             "queue_size": Q.queue_size(conn, user_id)},
+                }
+            except Exception as e:  # noqa: BLE001
+                logging.getLogger("recofeed").warning("分档取货失败：%s", e)
+
         # 后台预热本页描述的中文翻译（不阻塞响应；额度/缓存由服务内部控制）
         ids = [it["repo_id"] for it in items if it.get("repo_id") is not None]
         if ids:
             from api.translate_service import preheat_descriptions
             background_tasks.add_task(preheat_descriptions, ids)
-
-        # ── 热门 / 遗珠 分档（用户需求：热门=≥1000 星，遗珠=<1000 星）──
-        if mode in ("hot", "gem") and items:
-            try:
-                cond = "stars >= 1000" if mode == "hot" else "stars < 1000"
-                ids_set = {
-                    int(r["id"]) for r in conn.execute(
-                        f"SELECT id FROM repos WHERE {cond}")
-                }
-                items = [it for it in items if int(it.get("repo_id") or 0) in ids_set]
-            except Exception as e:  # noqa: BLE001
-                logging.getLogger("recofeed").warning("分档过滤失败：%s", e)
-
-        # 分档时多取候选（过滤会掉一批），保证一页仍是满的
-        if mode in ("hot", "gem"):
-            try:
-                from ml.user_model import model_path as _mp2
-                _has_model2 = _mp2(user_id).exists()
-            except Exception:
-                _has_model2 = False
-            if not _has_model2:
-                extra = get_queue_feed(conn, user_id, limit=limit)
-                have = {int(it.get("repo_id") or 0) for it in items}
-                for it in (extra.get("items") or []):
-                    if int(it.get("repo_id") or 0) not in have:
-                        items.append(it)
 
         # ── 富化：给卡片带一段 README 摘要 ──
         # 满屏卡片如果只有两行字，版面会显得空；摘要让信息密度正常，

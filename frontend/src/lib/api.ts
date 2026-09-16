@@ -99,7 +99,9 @@ export function getFeed(
     mode,
   })
   if (searchQuery) p.set('search_query', searchQuery)
-  return request<FeedResponse>(`/feed?${p}`)
+  // ⚠️ Feed 单独放宽到 45s：分档取货要在本地池里打分（3600+ 仓库），
+  //    后端若同时在跑翻译预热，20s 会被顶穿 → 用户看到空屏/报错。
+  return request<FeedResponse>(`/feed?${p}`, {}, 45_000)
 }
 
 export function getRepo(

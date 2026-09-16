@@ -61,6 +61,8 @@ const App: FC = () => {
   const bootRetryRef = useRef(0)
   /** 首屏最多自动重试几次 */
   const BOOT_RETRY_MAX = 3
+  /** 追加模式拿到空页时的重试计数（队列可能在补货中，不该让用户卡死） */
+  const emptyRetryRef = useRef(0)
 
   // ── 拉取一页 ──
   const loadPage = useCallback(async (replace = false): Promise<void> => {
@@ -81,6 +83,20 @@ const App: FC = () => {
         return next.length > MAX_ITEMS ? next.slice(next.length - MAX_ITEMS) : next
       })
       setMeta(res.meta)
+
+      // ⭐ 追加到空页 → 自动退避重试。
+      //    实测问题：队列被刷到底、补货还在冷却时，这次请求返回 0 条，
+      //    前端就永久停在"已经到底了"，而其实几十秒后就有货了。
+      if (!replace && res.items.length === 0) {
+        if (emptyRetryRef.current < 5) {
+          emptyRetryRef.current += 1
+          window.setTimeout(() => {
+            void loadPage(false)
+          }, 3000 * emptyRetryRef.current)
+        }
+      } else {
+        emptyRetryRef.current = 0
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : '加载失败'
       // ⭐ 首屏失败先自动重试：实测后端偶发 500（SQLite 写锁）或正在重启时，
@@ -101,7 +117,10 @@ const App: FC = () => {
       setLoading(false)
       fetchingRef.current = false
     }
-  }, [userId])
+    // ⚠️ 依赖必须带 feedMode：否则切换分档时这个 useCallback 还是旧闭包
+    //    （里面捕获的 mode 还是旧值），下面的 feed-loading effect 不会重跑 →
+    //    一个请求都不发，而 setItems([]) 已经清了列表 → 永久空屏。
+  }, [userId, feedMode])
 
   // ── 报错页自动重试：后端起来了就自动恢复，不用用户点 ──
   useEffect(() => {
