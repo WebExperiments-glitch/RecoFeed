@@ -260,7 +260,12 @@ const FeedList: FC<Props> = ({
             队列见底，正在按你的兴趣补货
           </span>
         ) : (
-          <span className="text-[12px] text-ink-faint/70">已经到底了</span>
+          <button
+            className="text-[12px] text-ink-faint/70 hover:text-ink-muted transition-colors"
+            onClick={onReachEnd}
+          >
+            已经到底了 · 点这里继续刷 ↻
+          </button>
         )}
       </div>
     </div>

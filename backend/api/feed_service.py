@@ -22,6 +22,7 @@ from core.config import (
     COLD_START_TRENDING_RATIO,
     RANK_WEIGHTS,
 )
+from tags.extractor import display_tags
 from user_profile.builder import TagVector
 from rank.rerank import (
     SearchIntervention,

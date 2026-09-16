@@ -66,10 +66,15 @@ def refill_queue(
     *,
     trigger: str = "low_watermark",
     target: int | None = None,
+    star_min: int | None = None,
+    star_max: int | None = None,
 ) -> dict:
     """补货：按用户画像决定抓什么，灌进队列。
 
     ⭐ 这就是"缓存池快见底时，爬虫看用户指标再爬"的实现。
+
+    star_min / star_max：**按星数档补货**。用户切到"遗珠"档时队列里全是热门仓库，
+       滤完就空屏 —— 所以分档浏览必须能触发"该档专属"的补货。
     """
     target = target or QUEUE_TARGET_SIZE
     before = Q.queue_size(conn, user_id)
@@ -83,7 +88,8 @@ def refill_queue(
     plan = build_fetch_plan(conn, user_id, queue_size=before)
 
     # ── ② 按计划抓取（当前从本地池挑选，接真实爬虫后换这里）──
-    picked = pick_from_local_pool(conn, user_id, plan, need=need)
+    picked = pick_from_local_pool(conn, user_id, plan, need=need,
+                                  star_min=star_min, star_max=star_max)
 
     # ── ③ 抓到的仓库要经过打分再入队（保证队列内顺序合理）──
     candidates = _score_picked(conn, user_id, picked, plan)
