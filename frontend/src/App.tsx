@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FC } from 'react'
 import type { FeedItem, FeedMeta, FeedMode, SessionUser } from '@/types/api'
 import { dislikeRepo, getFeed, getMe, logout, syncGithub } from '@/lib/api'
-import { flush, setEventUser } from '@/lib/events'
+import { flush, setEventUser, trackClick } from '@/lib/events'
 import {
   clearToken,
   consumeAuthFromUrl,
@@ -320,7 +320,11 @@ python3 app.py`}
             meta={meta}
             loading={loading}
             userId={userId}
-            onOpenDetail={() => setDrawerOpen(true)}
+            onOpenDetail={(it) => {
+              // ⭐ click 事件 = "值得点开看"（比滑过更强的正信号），后端据此算 ctr
+              trackClick(it.repo_id)
+              setDrawerOpen(true)
+            }}
             onDislike={(it) => void onDislike(it)}
             onReachEnd={onReachEnd}
             onActiveChange={setActiveItem}
@@ -344,7 +348,11 @@ python3 app.py`}
         userId={userId}
         open={showSearch}
         onClose={() => setShowSearch(false)}
-        onOpenDetail={(it) => setDetailId(it.repo_id)}
+        onOpenDetail={(it) => {
+          // 从搜索结果点开也算 click（正信号）
+          trackClick(it.repo_id)
+          setDetailId(it.repo_id)
+        }}
       />
 
       <ProfilePanel

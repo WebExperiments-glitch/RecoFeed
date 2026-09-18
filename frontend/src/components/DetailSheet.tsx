@@ -170,6 +170,17 @@ const DetailSheet: FC<Props> = ({ repoId, userId, onClose }) => {
                       {data.description}
                     </p>
                   )}
+                  {/* 翻译状态：原先挂在 README 块上，README 摘要撤掉后挪到简介这里 */}
+                  {!tr?.zh_description && trLoading && (
+                    <span className="text-[11px] text-ink-faint mt-1.5 inline-block animate-pulse">
+                      中文翻译生成中…
+                    </span>
+                  )}
+                  {!tr?.zh_description && trErr && !trLoading && (
+                    <p className="text-[11px] text-ink-faint mt-1.5">
+                      中文翻译暂不可用：{trErr}
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -237,63 +248,47 @@ const DetailSheet: FC<Props> = ({ repoId, userId, onClose }) => {
                   <RateBar label="新鲜度" v={data.freshness_score} />
                   <RateBar label="遗珠分" v={data.forgotten_score} gold />
                 </div>
-                <div className="grid grid-cols-3 gap-2 mt-3.5">
-                  <Stat label="曝光" value={String(data.impressions ?? 0)} />
-                  <Stat label="深读率" value={`${pct(data.deep_rate)}%`} />
-                  <Stat label="点击率" value={`${pct(data.ctr)}%`} />
-                </div>
-                {(data.impressions ?? 0) < 20 && (
-                  <p className="text-[11.5px] text-ink-faint mt-2.5 leading-relaxed">
-                    曝光较少，推荐系统正在给它更多机会。
+                {/* ⭐ 曝光/深读率/点击率只在"被推过"之后才有意义。
+                    之前无论有没有数据都摆三个 0（用户实测问"为什么都是0"）——
+                    那不是 bug 而是"还没被展示过"，所以这里改成明确告知。 */}
+                {(data.impressions ?? 0) > 0 ? (
+                  <>
+                    <div className="grid grid-cols-3 gap-2 mt-3.5">
+                      <Stat label="曝光" value={String(data.impressions ?? 0)} />
+                      <Stat label="深读率" value={`${pct(data.deep_rate)}%`} />
+                      <Stat label="点击率" value={`${pct(data.ctr)}%`} />
+                    </div>
+                    {(data.impressions ?? 0) < 20 && (
+                      <p className="text-[11.5px] text-ink-faint mt-2.5 leading-relaxed">
+                        曝光较少，推荐系统正在给它更多机会。
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-[11.5px] text-ink-faint mt-3.5 leading-relaxed">
+                    尚未推送给任何人。曝光 / 深读率 / 点击率要等它被展示过才会产生数据
+                    —— 现在显示 0 是正常的，不是故障。
                   </p>
                 )}
               </Section>
 
-              {/* README（自动翻译，可切换原文） */}
+              {/* README：不给摘要（用户要求"不要摘要"）—— 只留一个去 GitHub 读全文的入口。
+                  项目内的完整 README（markdown 渲染）在侧滑抽屉里。 */}
               {readme && (
-                <Section
-                  title={
-                    tr?.zh_readme && !showOriginal
-                      ? 'README 摘要（中文）'
-                      : 'README 摘要'
-                  }
-                  action={
-                    tr?.zh_readme ? (
-                      <button
-                        className="text-[11px] text-accent border border-accent/25 bg-accent/[0.08] rounded-full px-2.5 py-0.5 active:opacity-60"
-                        onClick={() => setShowOriginal((v) => !v)}
-                      >
-                        {showOriginal ? '看中文' : '看原文'}
-                      </button>
-                    ) : trLoading ? (
-                      <span className="text-[11px] text-ink-faint">
-                        翻译中…
-                      </span>
-                    ) : undefined
-                  }
-                >
-                  <pre className="text-[12.5px] leading-relaxed text-ink-soft whitespace-pre-wrap font-sans">
-                    {(tr?.zh_readme && !showOriginal
-                      ? tr.zh_readme
-                      : readme
-                    ).slice(0, 1600)}
-                    {((tr?.zh_readme && !showOriginal
-                      ? tr.zh_readme
-                      : readme
-                    ).length ?? 0) > 1600
-                      ? '\n\n…'
-                      : ''}
-                  </pre>
-                  {tr?.readme_truncated && !showOriginal && (
-                    <p className="text-[11px] text-ink-faint mt-2">
-                      （篇幅所限，仅翻译开头部分；完整内容请看 GitHub）
-                    </p>
-                  )}
-                  {trErr && !tr && (
-                    <p className="text-[11px] text-ink-faint mt-2">
-                      中文翻译暂不可用：{trErr}
-                    </p>
-                  )}
+                <Section title="完整 README">
+                  <a
+                    className="inline-flex items-center gap-1.5 text-[12.5px] text-accent
+                               border border-accent/25 bg-accent/[0.08] rounded-full px-3 py-1.5
+                               active:opacity-60"
+                    href={`${data.url}#readme`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    在 GitHub 读完整 README（{readme.length.toLocaleString()} 字）↗
+                  </a>
+                  <p className="text-[11.5px] text-ink-faint mt-2.5 leading-relaxed">
+                    划出侧滑抽屉可以直接读全文（含排版与代码块）。
+                  </p>
                 </Section>
               )}
 
