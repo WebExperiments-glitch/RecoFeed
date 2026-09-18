@@ -11,6 +11,24 @@ interface Props {
 const BADGE_HINT = /badge|shields\.io|badgen|codecov|travis|circleci|appveyor|actions\/workflows/i
 
 /**
+ * 去掉 README 里的 HTML 噪声。
+ *
+ * ⚠️ 不引入 rehype-raw（允许原始 HTML 等于把不可信仓库的 README 当代码执行，风险太大），
+ *    而是在渲染前做"有损但安全"的清洗：剥注释、剥布局标签、把 <br> 变空行。
+ *    实测很多 README 是 badge 墙 + 居中容器驱动，不清洗满屏都是尖括号。
+ */
+function sanitizeReadme(md: string): string {
+  const NL = '\n'
+  return md
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<br\s*\/?>/gi, NL)
+    .replace(/<\/(p|div|h[1-6]|li|tr)>/gi, NL)
+    .replace(/<[^>]{0,200}>/g, '')
+    .replace(/\n{3,}/g, NL + NL)
+    .trim()
+}
+
+/**
  * README 全文渲染。
  *
  * 用户的批评很直接：「它把这么丰富的一个项目，简化成了 1 Star、0 Fork、0 Issue
@@ -123,7 +141,7 @@ const ReadmeView: FC<Props> = ({ markdown }) => (
         },
       }}
     >
-      {markdown}
+      {sanitizeReadme(markdown)}
     </ReactMarkdown>
   </div>
 )

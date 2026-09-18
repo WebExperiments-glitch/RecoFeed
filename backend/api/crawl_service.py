@@ -252,11 +252,33 @@ ON CONFLICT(full_name) DO UPDATE SET
     velocity_score  = excluded.velocity_score,
     quality_score   = excluded.quality_score,
     description     = excluded.description
+-- ⚠️ 必须再处理 github_id 冲突：repos 上 full_name 与 github_id **都是 UNIQUE**，
+--    仓库改名后 full_name 变了、github_id 不变，只写 full_name 冲突会直接
+--    IntegrityError: UNIQUE constraint failed: repos.github_id（实测把整轮爬虫打断）。
+--    这里顺便把 full_name/owner/name 一起更新 —— 改名要跟着走。
+ON CONFLICT(github_id) DO UPDATE SET
+    full_name       = excluded.full_name,
+    owner           = excluded.owner,
+    name            = excluded.name,
+    stars           = excluded.stars,
+    forks           = excluded.forks,
+    pushed_at_gh    = excluded.pushed_at_gh,
+    velocity_score  = excluded.velocity_score,
+    quality_score   = excluded.quality_score,
+    description     = excluded.description
 """
 
 
 def _insert_repo(conn: sqlite3.Connection, r: dict[str, Any]) -> int:
-    """入库并返回 repo id。已存在（full_name 冲突）时刷新数据。"""
+    """入库并返回 repo id。已存在（full_name 冲突）时刷新数据。
+
+    ⚠️ 入库前对 README/描述做**密钥脱敏**：第三方 README 里常有别人泄露的真 key
+       （实测 skyagi 的 README 里就有一个 sk- 开头的 OpenAI Key），
+       收进数据集等于帮它二次传播，也会被 GitHub Push Protection 拦下。
+    """
+    from quality.redact import redact_secrets
+    r = {**r, "readme": redact_secrets(r.get("readme")),
+         "description": redact_secrets(r.get("description"))}
     rng = random.Random(r["github_id"] or r["full_name"])
     tags = extract_readme_tags(r["readme"], topk=50,
                                    topics=r["topics"], name=r["name"])

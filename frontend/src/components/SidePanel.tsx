@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import type { FC } from 'react'
-import type { FeedItem, RepoDetail } from '@/types/api'
-import { explainCards, getRepo, starRepo } from '@/lib/api'
+import type { FeedItem, RepoBrief, RepoDetail } from '@/types/api'
+import { explainCards, getBrief, getRepo, starRepo } from '@/lib/api'
 import { trackStar } from '@/lib/events'
 import { formatStars, timeAgo } from '@/lib/format'
+import { downloadShareCard } from '@/lib/shareCard'
 import ReadmeView from '@/components/ReadmeView'
+import BriefView from '@/components/BriefView'
 
 interface Props {
   /** 是否滑出 */
@@ -37,6 +39,11 @@ const SidePanel: FC<Props> = ({
   const [loading, setLoading] = useState(false)
   const [explain, setExplain] = useState<string | null>(null)
   const [starred, setStarred] = useState(false)
+  // AI 速读（README → 结构化简介）：按需生成 + 服务端缓存
+  const [brief, setBrief] = useState<RepoBrief | null>(null)
+  const [briefLoading, setBriefLoading] = useState(false)
+  const [briefErr, setBriefErr] = useState<string | null>(null)
+  const [shareMsg, setShareMsg] = useState<string | null>(null)
   const repoId = item?.repo_id ?? null
 
   // 展开时才拉数据（含 README 全文），避免无谓请求
@@ -67,6 +74,12 @@ const SidePanel: FC<Props> = ({
     }
   }, [open, repoId, userId])
 
+  // 卡片上若已带缓存的速读，直接显示（feed 只下发已生成的，不会触发 LLM）
+  useEffect(() => {
+    setBrief(item?.brief ?? null)
+    setBriefErr(null)
+  }, [item?.repo_id, item?.brief])
+
   // Esc 关闭
   useEffect(() => {
     if (!open) return
@@ -76,6 +89,41 @@ const SidePanel: FC<Props> = ({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [open, onClose])
+
+  const generateBrief = async (): Promise<void> => {
+    if (!item || briefLoading) return
+    setBriefLoading(true)
+    setBriefErr(null)
+    try {
+      const r = await getBrief(userId, [item.repo_id], true)
+      const got = r.briefs?.[String(item.repo_id)]
+      if (got?.brief) setBrief(got.brief)
+      else setBriefErr(got?.reason || '生成失败，稍后再试')
+    } catch (e) {
+      setBriefErr(e instanceof Error ? e.message : '生成失败')
+    } finally {
+      setBriefLoading(false)
+    }
+  }
+
+  const share = async (): Promise<void> => {
+    if (!item) return
+    setShareMsg('生成中…')
+    try {
+      const r = await downloadShareCard(item, {
+        oneLiner: brief?.one_liner,
+        highlights: brief?.highlights,
+        stack: brief?.stack,
+      })
+      setShareMsg(
+        r === 'clipboard' ? '✓ 已复制到剪贴板，去粘贴吧'
+          : r === 'download' ? '✓ 已下载分享图' : '生成失败，请重试',
+      )
+    } catch {
+      setShareMsg('生成失败，请重试')
+    }
+    setTimeout(() => setShareMsg(null), 3200)
+  }
 
   return (
     <>
@@ -191,6 +239,14 @@ const SidePanel: FC<Props> = ({
                 ))}
               </div>
 
+              {/* AI 速读：先让用户"一眼看懂这个项目"，再决定要不要读全文 */}
+              <BriefView
+                brief={brief}
+                loading={briefLoading}
+                error={briefErr}
+                onGenerate={() => void generateBrief()}
+              />
+
               {/* README 全文 —— 按 markdown 正常排版（用户要求"完整的 MD 文件可以给用户看"）。
                   卡片只能回答"要不要点进来"，判断项目深度必须能看到完整 README。 */}
               <div className="mt-6 pt-5 border-t border-divider">
@@ -234,10 +290,16 @@ const SidePanel: FC<Props> = ({
                 >
                   {starred ? '⭐ 已收藏' : '☆ 收藏'}
                 </button>
+                <button className="btn-ghost" onClick={() => void share()}>
+                  分享卡片 ↗
+                </button>
                 <button className="btn-ghost" onClick={() => onOpenDetail(item)}>
                   详情面板 ›
                 </button>
                 <div className="flex-1" />
+                {shareMsg && (
+                  <span className="text-[11.5px] text-accent">{shareMsg}</span>
+                )}
                 <button
                   className="text-[12.5px] text-ink-muted hover:text-risk-danger transition-colors"
                   onClick={() => {

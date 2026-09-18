@@ -143,6 +143,10 @@ def main() -> None:
     ap.add_argument("--embed", action="store_true", help="抓完重建向量与画像")
     ap.add_argument("--set", choices=["main", "gem"], default="main",
                     help="main=高星广度（默认）；gem=遗珠档（50~999 星）")
+    ap.add_argument("--from-profile", action="store_true",
+                    help="按用户画像标签定向抓遗珠（低星 × 你的兴趣方向）。"
+                         "⚠️ 通用 topic 抓来的低星仓库往往与你的兴趣无关，"
+                         "个人分全被门槛滤掉 → 遗珠档只剩一两张。")
     args = ap.parse_args()
 
     token = _token(args.token)
@@ -152,6 +156,25 @@ def main() -> None:
     queries = list(GEM_QUERIES if args.set == "gem" else BASE_QUERIES)
     if args.set == "gem":
         print("模式：遗珠档（50~999 星）—— 填充「遗珠」筛选的候选池")
+
+    if args.from_profile:
+        # ⭐ 按画像定向：把"用户的兴趣方向"和"低星"这两个条件叠起来
+        prof: list[str] = []
+        try:
+            import json as _json
+            with get_conn() as _c:
+                row = _c.execute(
+                    "SELECT top_topics FROM user_profiles WHERE user_id = 3"
+                ).fetchone()
+                if row and row["top_topics"]:
+                    prof = [t["tag"] for t in _json.loads(row["top_topics"])][:12]
+        except Exception as e:  # noqa: BLE001
+            print(f"（读画像失败：{type(e).__name__}）")
+        if prof:
+            top = max(50, args.target // max(1, len(prof)) // 3)
+            queries = [f"stars:50..999 {t}" if " " not in t and t.isascii() else t
+                       for t in prof] + [f"stars:50..999 topic:{t}" for t in prof if "-" in t]
+            print(f"按画像定向（{len(queries)} 个查询，每查询最多取 {top} 个左右）：{prof}")
     try:
         with get_conn() as conn:
             rows = conn.execute(
@@ -196,7 +219,13 @@ def main() -> None:
                     if not norm:
                         skipped += 1
                         continue
-                    rid = _insert_repo(conn, norm)
+                    try:
+                        rid = _insert_repo(conn, norm)
+                    except Exception as e:  # noqa: BLE001
+                        # 单个仓库入库失败不该打断整轮（实测 github_id 唯一冲突曾中断爬虫）
+                        print(f"      ⚠️ 入库失败 {fn}：{type(e).__name__}")
+                        skipped += 1
+                        continue
                     if not rid:
                         skipped += 1
                         continue

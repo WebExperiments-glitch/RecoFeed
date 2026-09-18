@@ -62,6 +62,33 @@ def _creds(conn: sqlite3.Connection) -> tuple[int, int]:
     return tok, sess
 
 
+def _redact_all(conn) -> int:
+    """导出前对全库文本做一次密钥脱敏（兜底）。
+
+    ⚠️ 为什么必须在导出时再做一遍：README 是第三方内容，
+       GitHub Push Protection 会扫推送内容 —— 快照里只要有一个"长得像 key"的字符串，
+       整个推送就会被拒（实测被 GH013 拦过）。这条兜底保证快照永远干净。
+    """
+    import sys
+    from pathlib import Path as _P
+    _backend = _P(__file__).resolve().parent.parent / "backend"
+    if str(_backend) not in sys.path:
+        sys.path.insert(0, str(_backend))
+    from quality.redact import has_secret, redact_secrets
+
+    n = 0
+    # ⚠️ 这里用位置索引而不是 r["col"]：本脚本的 dst 连接没设 row_factory，
+    #    按列名取会 TypeError: tuple indices must be integers（踩过）
+    for rid, md, desc in conn.execute(
+            "SELECT id, readme_md, description FROM repos").fetchall():
+        md, desc = md or "", desc or ""
+        if has_secret(md) or has_secret(desc):
+            conn.execute("UPDATE repos SET readme_md = ?, description = ? WHERE id = ?",
+                         (redact_secrets(md), redact_secrets(desc), rid))
+            n += 1
+    return n
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="导出脱敏数据集快照")
     ap.add_argument("--check", action="store_true", help="只检查运行库是否含凭据")
@@ -110,6 +137,14 @@ def main() -> None:
         except sqlite3.OperationalError:
             pass
     dst.commit()
+    # ⭐ 兜底：全库文本再脱敏一次密钥。
+    #    README 是第三方内容，里可能藏着**别人泄露的真 key**（实测 skyagi 的 README 就有一个）。
+    #    GitHub Push Protection 会扫推送内容 —— 只要有一个"长得像 key"的字符串，整个推送会被拒
+    #    （实测被 GH013 拦下过）。这条保证快照永远干净。
+    n_redacted = _redact_all(dst)
+    if n_redacted:
+        print(f"  密钥脱敏：{n_redacted} 个仓库的 README/描述已抹除疑似密钥")
+
     dst.execute("VACUUM")
     dst.commit()
 

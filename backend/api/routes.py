@@ -99,6 +99,13 @@ class EventIn(BaseModel):
     rank_position: int | None = None
 
 
+class BriefIn(BaseModel):
+    """AI 项目速读请求。"""
+    user_id: int = 1
+    repo_ids: list[int] = Field(default_factory=list)
+    force: bool = False
+
+
 class EventBatch(BaseModel):
     user_id: int = 1
     events: list[EventIn] = Field(default_factory=list)
@@ -293,6 +300,16 @@ def get_feed(
                         ex = ""
                     ex_map[int(r["id"])] = ex
                     st_map[int(r["id"])] = stats
+                # 已生成过 AI 速读的，顺带带上（**只读缓存**，不触发任何 LLM 调用）
+                try:
+                    from api.brief_service import brief_cached_only
+                    for it in items:
+                        b = brief_cached_only(conn, int(it.get("repo_id") or 0))
+                        if b:
+                            it["brief"] = b
+                except Exception:  # noqa: BLE001
+                    pass
+
                 for it in items:
                     rid = int(it.get("repo_id") or 0)
                     it["readme_excerpt"] = ex_map.get(rid, "")
@@ -1060,6 +1077,26 @@ def user_profile_summarize(user_id: int = Query(1),
     if not res.get("ok"):
         raise HTTPException(status_code=503, detail=res.get("reason", "LLM 不可用"))
     return res
+
+
+@router.post("/ml/brief")
+def ml_brief(payload: BriefIn) -> dict[str, Any]:
+    """⭐ AI 项目速读：把 README 变成「一句话定位 / 技术栈 / 核心亮点 / 适合谁 / 成熟度」。
+
+    按需调用（前端点按钮才跑）+ 落库缓存（README 变了才重新生成）——
+    不随 Feed 自动调用，避免把额度烧在用户根本不看的仓库上。
+    """
+    from api.brief_service import make_brief
+
+    ids = [int(i) for i in payload.repo_ids][:3]      # 单次最多 3 个：README 很长，别混上下文
+    if not ids:
+        return {"ok": False, "reason": "缺少 repo_ids", "briefs": {}}
+
+    out: dict[str, Any] = {}
+    with get_conn() as conn:
+        for rid in ids:
+            out[str(rid)] = make_brief(conn, rid, force=payload.force)
+    return {"ok": True, "briefs": out}
 
 
 @router.post("/ml/explain")
