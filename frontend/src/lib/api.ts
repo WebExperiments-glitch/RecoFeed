@@ -313,7 +313,11 @@ const BACKEND_ORIGIN =
   'http://127.0.0.1:8000'
 
 export function githubLoginUrl(): string {
-  return `${BACKEND_ORIGIN}${BASE}/auth/github/login`
+  // ⭐ 带上当前前端地址：后端把 origin 绑进 OAuth state，回跳时按它跳。
+  //    否则回跳地址写死在 5173 —— dev server 换端口（5173 被系统保留时）就会
+  //    登录成功却 ERR_CONNECTION_REFUSED。
+  const origin = encodeURIComponent(window.location.origin)
+  return `${BACKEND_ORIGIN}${BASE}/auth/github/login?origin=${origin}`
 }
 
 /** 令牌登录（不用建 OAuth App；PAT 需含 read:user + public_repo 权限）。 */

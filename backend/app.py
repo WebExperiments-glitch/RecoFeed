@@ -28,7 +28,8 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import JSONResponse  # noqa: E402
 
 from api.routes import router  # noqa: E402
-from core.config import CORS_ORIGINS, DATA_DIR, DB_PATH, HOST, PORT  # noqa: E402
+from core.config import (CORS_ORIGINS, CORS_ORIGIN_REGEX, DATA_DIR,  # noqa: E402
+                         DB_PATH, HOST, PORT)
 from db.connection import init_db  # noqa: E402
 from tags.extractor import init_jieba  # noqa: E402
 
@@ -77,7 +78,10 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
-    allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
+    # 本地 dev server 端口可变（5173 可能落在 Windows 保留段）→ 正则兜住 localhost 任意端口。
+    # 统一取自 core.config.CORS_ORIGIN_REGEX（单一来源，别在这里再写死一份 —— 曾经重复
+    # 传入 allow_origin_regex 直接 SyntaxError 起不来）。
+    allow_origin_regex=CORS_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

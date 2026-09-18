@@ -2,7 +2,8 @@
 
 > 后端：FastAPI + SQLite，默认监听 `http://127.0.0.1:8000`
 > 交互式文档：启动后访问 `http://127.0.0.1:8000/docs`（Swagger UI）
-> 前端：Vite dev server `http://localhost:5173`，通过 `/api` 前缀代理到后端
+> 前端：Vite dev server（默认 `http://localhost:5173`，端口可用 `VITE_PORT` 覆盖；
+> 被系统保留时 Vite 会自动往后找），通过 `/api` 前缀代理到后端
 
 ## 约定
 
@@ -239,7 +240,12 @@ README 与标签由后台任务异步补齐（走 jsdelivr CDN），接口秒回
 { "configured": false, "callback_url": "http://localhost:8000/api/auth/github/callback" }
 ```
 
-### `GET /api/auth/github/login`
+### `GET /api/auth/github/login?origin=http://localhost:5273`
+> ⭐ `origin`（可选）：发起登录的前端地址。后端把它绑到 OAuth `state` 上，回调时按它跳回 ——
+> 于是 dev server 换端口（5173 被 Windows 保留段占用时）也能正常登录。
+> 只接受 localhost/127.0.0.1，缺省时回退到 `AUTH_FRONTEND_REDIRECT`（默认 `http://localhost:5173`）。
+
+### `GET /api/auth/github/login`（不带 origin）
 302 跳转到 GitHub 授权页。未配置 OAuth 时返回 400 并给出配置指引。
 
 ### `GET /api/auth/github/callback?code=…&state=…`

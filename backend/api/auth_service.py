@@ -154,6 +154,54 @@ def starred_repo_weight(rank: int) -> float:
 
 # ---------------------------------------------------------------- OAuth
 
+# ---------------------------------------------------------------- 前端来源（端口无关）
+# ⚠️ 为什么需要它：回跳地址原先写死成 http://localhost:5173（AUTH_FRONTEND_REDIRECT），
+#    一旦前端换了端口（比如 5173 落在 Windows 保留段而改用 5273），
+#    GitHub 登录回来就会 ERR_CONNECTION_REFUSED。
+#    解法：发起登录时把 window.location.origin 带上，用 state 做 key 存起来，
+#    回跳时按它跳 —— 于是 dev server 用哪个端口都能登录。
+#    只接受 localhost/127.0.0.1（避免开放重定向）。
+_PENDING_ORIGINS: dict[str, tuple[str, float]] = {}
+_ORIGIN_TTL_SEC = 600
+
+
+def _is_local_origin(origin: str) -> bool:
+    from urllib.parse import urlparse
+    try:
+        u = urlparse(origin)
+    except Exception:
+        return False
+    return u.scheme in ("http", "https") and u.hostname in (
+        "localhost", "127.0.0.1", "::1")
+
+
+def remember_origin(state: str, origin: str | None) -> None:
+    """记下发起登录的前端来源（state → origin）。"""
+    import time as _t
+    if not state or not origin or not _is_local_origin(origin):
+        return
+    now = _t.time()
+    # 顺手清理过期项，避免长期运行堆积
+    for k, (_, ts) in list(_PENDING_ORIGINS.items()):
+        if now - ts > _ORIGIN_TTL_SEC:
+            _PENDING_ORIGINS.pop(k, None)
+    _PENDING_ORIGINS[state] = (origin.rstrip("/"), now)
+
+
+def pop_origin(state: str | None) -> str | None:
+    """取出该 state 对应的前端来源（取一次即删）；无则 None（走配置回退）。"""
+    import time as _t
+    if not state:
+        return None
+    item = _PENDING_ORIGINS.pop(state, None)
+    if not item:
+        return None
+    origin, ts = item
+    if _t.time() - ts > _ORIGIN_TTL_SEC:
+        return None
+    return origin
+
+
 def build_login_url(redirect_uri: str, state: str | None = None) -> str:
     q = {
         "client_id": GITHUB_CLIENT_ID,
