@@ -11,6 +11,8 @@ import {
   poolBadge,
   stripMarkdown,
   timeAgo,
+  formatSize,
+  isThinReadme,
 } from '@/lib/format'
 import { trackStar } from '@/lib/events'
 
@@ -104,6 +106,8 @@ const DetailSheet: FC<Props> = ({ repoId, userId, onClose }) => {
   const lic = data ? licenseBadge(data.license_spdx, data.license_risk) : null
   const pool = poolBadge(data?.current_pool ?? 0)
   const readme = data?.readme_md ? stripMarkdown(data.readme_md) : ''
+  // 兜底 README（# 名 + 一句话）不值得摆"读全文"入口
+  const thinReadme = isThinReadme(readme, data?.name, data?.description)
 
   return (
     <div className="absolute inset-0 z-40 flex flex-col justify-end">
@@ -217,7 +221,7 @@ const DetailSheet: FC<Props> = ({ repoId, userId, onClose }) => {
                   <Stat
                     label="体积"
                     value={
-                      data.size_kb ? `${(data.size_kb / 1024).toFixed(1)} MB` : '—'
+                      formatSize(data.size_kb)
                     }
                   />
                   <Stat label="创建" value={timeAgo(data.created_at_gh)} />
@@ -272,25 +276,32 @@ const DetailSheet: FC<Props> = ({ repoId, userId, onClose }) => {
                 )}
               </Section>
 
-              {/* README：不给摘要（用户要求"不要摘要"）—— 只留一个去 GitHub 读全文的入口。
-                  项目内的完整 README（markdown 渲染）在侧滑抽屉里。 */}
-              {readme && (
-                <Section title="完整 README">
-                  <a
-                    className="inline-flex items-center gap-1.5 text-[12.5px] text-accent
-                               border border-accent/25 bg-accent/[0.08] rounded-full px-3 py-1.5
-                               active:opacity-60"
-                    href={`${data.url}#readme`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    在 GitHub 读完整 README（{readme.length.toLocaleString()} 字）↗
-                  </a>
-                  <p className="text-[11.5px] text-ink-faint mt-2.5 leading-relaxed">
-                    划出侧滑抽屉可以直接读全文（含排版与代码块）。
+              {/* README：不给摘要（用户要求"不要摘要"）—— 只留去 GitHub 读全文的入口。
+                  ⚠️ 但对"兜底 README"（爬虫只抓到「# 仓库名 + 一句话简介」，实测 79 字）
+                  不摆入口 —— 点进去只有一行字，比不显示更尴尬。 */}
+              <Section title="README">
+                {readme && !thinReadme ? (
+                  <>
+                    <a
+                      className="inline-flex items-center gap-1.5 text-[12.5px] text-accent
+                                 border border-accent/25 bg-accent/[0.08] rounded-full px-3 py-1.5
+                                 active:opacity-60"
+                      href={`${data.url}#readme`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      在 GitHub 读完整 README（{readme.length.toLocaleString()} 字）↗
+                    </a>
+                    <p className="text-[11.5px] text-ink-faint mt-2.5 leading-relaxed">
+                      划出侧滑抽屉可以直接读全文（含排版与代码块）。
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-[11.5px] text-ink-faint leading-relaxed">
+                    该仓库没有实质 README 内容（只有首页简介）。
                   </p>
-                </Section>
-              )}
+                )}
+              </Section>
 
               {/* 标签 */}
               {data.tags_json && (

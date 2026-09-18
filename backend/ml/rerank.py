@@ -131,9 +131,16 @@ def rerank(conn: sqlite3.Connection, user_id: int, items: list[Any],
     ranked = blend_and_sort(kept, scores, get_repo_id, get_score)
 
     # ⭐ 尾部兜底：门槛踢完后如果不够一页，用"个人分最高的被踢项"补满（排在末尾）。
-    #    目的：头部保持干净（不合口味的一律不出现），但不至于一页只有两三条。
+    #
+    #    ⚠️ 2026-09-18 默认**关闭**。原因来自用户/评测反馈：
+    #       补进来的都是"个人模型判定不合口味"的卡片，卡片上还会写着
+    #       "偏 XX 方向，可能不合你的口味" —— 用户看到这种卡片会直接失去信任
+    #       （评测原话：这种基于泛标签的强行匹配"极大消耗了用户的耐心和信任"）。
+    #       宁可一页少几张（前端会自动补货、并给"继续刷"入口），也不要塞不合口味的。
+    #       想恢复旧行为：把下面常量改成 True。
+    TAIL_FILL_ENABLED = False
     filled = 0
-    if len(ranked) < min_keep:
+    if TAIL_FILL_ENABLED and len(ranked) < min_keep:
         passed = {get_repo_id(it) for it in ranked}
         filler = sorted(
             (it for it in items if get_repo_id(it) not in passed),
