@@ -57,6 +57,28 @@ def get_conn(db_path: str | None = None) -> Iterator[sqlite3.Connection]:
         conn.close()
 
 
+def _ensure_columns(conn) -> None:
+    """轻量迁移：给老库补上新增列（幂等，失败不致命）。
+
+    ⚠️ 为什么需要：schema.sql 只在首次建库时生效，已有的 recofeed.db 不会自动加列，
+       而新代码会引用新列 —— 不补就会报 "no such column"。
+    """
+    wanted = {
+        "repos": [("lifecycle_note", "TEXT")],
+    }
+    for table, cols in wanted.items():
+        try:
+            have = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+        except Exception:
+            continue
+        for name, sqltype in cols:
+            if name not in have:
+                try:
+                    conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {sqltype}")
+                except Exception:
+                    pass
+
+
 def init_db(db_path: str | None = None, drop: bool = False) -> None:
     """执行 schema.sql 建表。drop=True 时先清空（仅用于测试）。"""
     if drop and db_path:
@@ -72,6 +94,7 @@ def init_db(db_path: str | None = None, drop: bool = False) -> None:
     sql = SCHEMA_PATH.read_text(encoding="utf-8")
     with get_conn(db_path) as conn:
         conn.executescript(sql)
+        _ensure_columns(conn)          # 老库补列（schema.sql 只在首建时生效）
 
 
 # ------------------------------------------------------------------ 查询辅助

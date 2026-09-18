@@ -100,11 +100,19 @@ async def timing_middleware(request: Request, call_next):
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
-    """统一错误响应，避免前端拿到 HTML 报错页。"""
-    log.exception("未捕获异常 %s %s", request.method, request.url.path)
+    """统一错误响应，避免前端拿到 HTML 报错页。
+
+    ⭐ 带 error_id：把 8 位短 id 同时写进日志与响应体 ——
+       用户报"某个页面失败"时，凭这个 id 就能在后端日志里一键定位到完整堆栈。
+    """
+    import uuid
+
+    error_id = uuid.uuid4().hex[:8]
+    log.exception("[%s] 未捕获异常 %s %s", error_id, request.method, request.url.path)
     return JSONResponse(
         status_code=500,
-        content={"detail": "服务器内部错误", "path": request.url.path},
+        content={"detail": "服务器内部错误（后端日志可按 error_id 检索）",
+                 "error_id": error_id, "path": request.url.path},
     )
 
 

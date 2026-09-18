@@ -85,7 +85,8 @@ CREATE TABLE IF NOT EXISTS repos (
   last_refreshed_at TEXT,
   last_pushed_at  TEXT,
   is_archived     INTEGER NOT NULL DEFAULT 0,
-  is_dead         INTEGER NOT NULL DEFAULT 0   -- 长期无 push
+  is_dead         INTEGER NOT NULL DEFAULT 0,  -- 长期无 push / README 声明已停更
+  lifecycle_note  TEXT                         -- 停更判定命中的原句（quality/lifecycle.py）
 );
 CREATE INDEX IF NOT EXISTS idx_repos_lang      ON repos(language);
 CREATE INDEX IF NOT EXISTS idx_repos_velocity  ON repos(velocity_score DESC);

@@ -247,7 +247,7 @@ def get_feed(
                 ex_map: dict[int, str] = {}
                 st_map: dict[int, dict] = {}
                 for r in conn.execute(
-                    f"""SELECT id, readme_md, description, forks, open_issues, size_kb,
+                    f"""SELECT id, name, readme_md, description, forks, open_issues, size_kb,
                                created_at_gh, pushed_at_gh, has_ci, has_tests,
                                quality_score, velocity_score, freshness_score,
                                forgotten_score, homepage
@@ -255,6 +255,20 @@ def get_feed(
                     tuple(ids),
                 ):
                     ex = readme_excerpt(r["readme_md"])
+                    # ⭐ 摘要过于贫瘠就不要摆出来（用户实测吐槽：某卡片 README 摘要
+                    #    只有仓库名"biliboard-opensource"，既无信息量又像 bug）。
+                    #    规则：太短（<50 字）或与仓库名/简介实质相同 → 视为无摘要。
+                    if ex:
+                        import re as _re
+                        # ⚠️ 用 r.keys() 兜底：曾经因为 SELECT 漏了 name 导致
+                        #    r["name"] 抛 sqlite3.Row 的 "No item with that key"，
+                        #    整块富化被 except 吞掉 → 所有卡片 stats/摘要全空。
+                        #    取不到的字段退化为空串即可，不能让一个可选字段炸掉整块逻辑。
+                        _nm_raw = r["name"] if "name" in r.keys() else ""
+                        _norm = lambda t: _re.sub(r"[\s\W_]+", "", (t or "").lower())
+                        _ex, _nm, _ds = _norm(ex), _norm(_nm_raw), _norm(r["description"])
+                        if len(ex) < 50 or _ex in (_nm, _ds) or _ex == (_nm + _ds):
+                            ex = ""
                     # 概览与打分：桌面端右列用它填满版面（不依赖 README，
                     # 因为扩库进来的仓库大多只有"描述兜底"的伪 README）
                     stats = {
@@ -284,7 +298,11 @@ def get_feed(
                     it["readme_excerpt"] = ex_map.get(rid, "")
                     it["stats"] = st_map.get(rid)
         except Exception as e:  # noqa: BLE001
+            # ⭐ 静默降级是危险的：这次就是富化整块失败却只留了一行日志，
+            #    前端表现为"数据全空"，看起来像 UI 坏了。把原因透出到 meta，
+            #    开发时一眼能看到（生产可忽略该字段）。
             logging.getLogger("recofeed").warning("README 摘要富化失败：%s", e)
+            result.setdefault("meta", {})["enrich_error"] = f"{type(e).__name__}: {e}"
 
         # ⭐ 本地双塔重排：有个人模型（personal_model_u*.pth）时，
         #    用「你的模型」对这页候选重新打分排序；没有模型则原样返回。
