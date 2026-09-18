@@ -321,6 +321,27 @@ const FeedCard: FC<Props> = ({
               </div>
             )}
 
+            {/* README 摘要 —— 放在散文列（左），与简介/标签同属"读"的内容；
+                右侧专留数据（概览+画像），两列高度更均衡，不再留大片空白。
+                完整 README（markdown 渲染）在抽屉里。 */}
+            {item.readme_excerpt && (
+              <div className="border-t border-divider pt-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-[11px] text-ink-faint">README 摘要</span>
+                  <div className="flex-1" />
+                  <button
+                    className="text-[11px] text-ink-muted hover:text-accent transition-colors"
+                    onClick={() => onOpenDetail(item)}
+                  >
+                    读全文 ↗
+                  </button>
+                </div>
+                <p className="text-[12.5px] leading-[1.75] text-ink-muted whitespace-pre-wrap">
+                  {item.readme_excerpt}
+                </p>
+              </div>
+            )}
+
             <div className="flex lg:hidden items-center gap-1.5 flex-wrap">
               <span className="chip h-6 bg-pearl text-ink-muted border border-hairline">
                 ⭐ {formatStars(item.stars)}
@@ -385,14 +406,6 @@ const FeedCard: FC<Props> = ({
               </div>
             )}
 
-            {item.readme_excerpt && (
-              <div className="min-h-0 flex flex-col">
-                <div className="text-[11px] text-ink-faint mb-2">README 摘要</div>
-                <p className="text-[12.5px] leading-[1.75] text-ink-muted whitespace-pre-wrap">
-                  {item.readme_excerpt}
-                </p>
-              </div>
-            )}
           </div>
         </div>
 

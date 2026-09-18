@@ -4,6 +4,7 @@ import type { FeedItem, RepoDetail } from '@/types/api'
 import { explainCards, getRepo, starRepo } from '@/lib/api'
 import { trackStar } from '@/lib/events'
 import { formatStars, timeAgo } from '@/lib/format'
+import ReadmeView from '@/components/ReadmeView'
 
 interface Props {
   /** 是否滑出 */
@@ -190,16 +191,28 @@ const SidePanel: FC<Props> = ({
                 ))}
               </div>
 
-              {/* README 全文 */}
+              {/* README 全文 —— 按 markdown 正常排版（用户要求"完整的 MD 文件可以给用户看"）。
+                  卡片只能回答"要不要点进来"，判断项目深度必须能看到完整 README。 */}
               <div className="mt-6 pt-5 border-t border-divider">
-                <div className="text-[11px] text-ink-faint mb-2">README</div>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-[11px] text-ink-faint">README 全文</span>
+                  {detail?.readme_md && (
+                    <span className="text-[10.5px] text-ink-faint">
+                      {detail.readme_md.length.toLocaleString()} 字
+                    </span>
+                  )}
+                  <div className="flex-1" />
+                  <a
+                    className="text-[11px] text-ink-muted hover:text-accent transition-colors"
+                    href={`${item.url}#readme`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    在 GitHub 看原文 ↗
+                  </a>
+                </div>
                 {loading && <div className="text-[12.5px] text-ink-faint">读取中…</div>}
-                {!loading && detail?.readme_md && (
-                  <pre className="whitespace-pre-wrap break-words font-sans
-                                  text-[12.5px] leading-[1.75] text-ink-soft">
-                    {detail.readme_md}
-                  </pre>
-                )}
+                {!loading && detail?.readme_md && <ReadmeView markdown={detail.readme_md} />}
                 {!loading && !detail?.readme_md && (
                   <div className="text-[12.5px] text-ink-faint">这个仓库没有 README</div>
                 )}

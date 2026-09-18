@@ -339,11 +339,18 @@ def _bg_enrich_readmes(repo_ids: list[int]) -> None:
                 if t and len(t) > 1 and t not in tags:
                     tags[t] = round(0.5 + rng.random() * 0.3, 3)
             tags = dict(sorted(tags.items(), key=lambda kv: -kv[1])[:50])
+            # ⭐ 拿到 README 的同时判定「是否已停更」：README 里写着"本项目停更/
+            #    不再维护"的仓库不该被推荐（用户实测反馈），标记 is_dead 即被
+            #    召回/补货/搜索全线排除。判定逻辑见 quality/lifecycle.py。
+            from quality.lifecycle import detect_stopped
+            note = detect_stopped(md)
             conn.execute(
                 """UPDATE repos SET readme_md=?, readme_len=?,
-                       tags_json=?, tags_updated_at=datetime('now')
+                       tags_json=?, tags_updated_at=datetime('now'),
+                       is_dead = CASE WHEN ? IS NULL THEN is_dead ELSE 1 END,
+                       lifecycle_note = COALESCE(?, lifecycle_note)
                    WHERE id=?""",
-                (md, len(md), json.dumps(tags, ensure_ascii=False), rid),
+                (md, len(md), json.dumps(tags, ensure_ascii=False), note, note, rid),
             )
 
 
