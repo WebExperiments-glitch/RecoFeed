@@ -19,6 +19,7 @@ import TopBar from '@/components/TopBar'
 import SearchPanel from '@/components/SearchPanel'
 import DetailSheet from '@/components/DetailSheet'
 import ProfilePanel from '@/components/ProfilePanel'
+import WeeklyReport from '@/components/WeeklyReport'
 import LoginGate from '@/components/LoginGate'
 import ToastHost, { toast } from '@/components/Toast'
 
@@ -48,6 +49,8 @@ const App: FC = () => {
 
   const [showSearch, setShowSearch] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
+  /** AI 周报面板 */
+  const [showReport, setShowReport] = useState(false)
   const [detailId, setDetailId] = useState<number | null>(null)
   /** 当前正在看的卡片（侧滑抽屉的数据源，由 FeedList 上报） */
   const [activeItem, setActiveItem] = useState<FeedItem | null>(null)
@@ -358,11 +361,18 @@ python3 app.py`}
         }}
       />
 
+      <WeeklyReport
+        open={showReport}
+        userId={userId}
+        onClose={() => setShowReport(false)}
+      />
+
       <ProfilePanel
         userId={userId}
         user={user}
         open={showProfile}
         onClose={() => setShowProfile(false)}
+        onOpenReport={() => setShowReport(true)}
         onSync={() => void runSync()}
         onLogout={() => void handleLogout()}
       />

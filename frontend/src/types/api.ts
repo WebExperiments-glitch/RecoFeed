@@ -427,3 +427,33 @@ export interface BatchTranslateResponse {
 export interface ApiError {
   detail: string
 }
+
+/** AI 意图解析结果：一句大白话 → 结构化检索意图 */
+export interface ParsedIntent {
+  keywords: string[]
+  tags: string[]
+  exclude: string[]
+  /** 一句话复述 AI 理解到的需求 */
+  summary: string
+}
+
+/** AI 周报 */
+export interface WeeklyStats {
+  days: number
+  impressions: number
+  skips: number
+  deep_reads: number
+  clicks: number
+  likes: number
+  corpus_new: number
+  interests: string[]
+  engaged: { repo: string; desc: string; stars: number; tags: string[] }[]
+}
+
+export interface WeeklyReport {
+  headline: string
+  stats_comment: string
+  highlights: { repo: string; why: string }[]
+  learning_path: string[]
+  next_step: string
+}

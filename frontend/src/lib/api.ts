@@ -28,6 +28,9 @@ import type {
   TranslateStatus,
   UserProfile,
   RepoBrief,
+  ParsedIntent,
+  WeeklyReport,
+  WeeklyStats,
 } from '@/types/api'
 import { getToken } from '@/lib/session'
 
@@ -384,8 +387,40 @@ export function getBrief(
   repoIds: number[],
   force = false,
 ): Promise<{ ok: boolean; briefs: Record<string, { ok: boolean; brief?: RepoBrief; cached?: boolean; model?: string; reason?: string }> }> {
-  return request(`${BASE}/ml/brief`, {
+  return request(`/ml/brief`, {
     method: 'POST',
     body: JSON.stringify({ user_id: userId, repo_ids: repoIds, force }),
   }, 180_000)
+}
+
+/**
+ * ⭐ AI 意图解析：一句大白话 → {keywords, tags, exclude, summary}。
+ * keywords 会被写进自定义关键词，爬虫随即按它们去 GitHub 抓。
+ */
+export function parseIntent(
+  userId: number,
+  text: string,
+  applyKeywords = true,
+): Promise<{
+  ok: boolean
+  reason?: string
+  intent?: ParsedIntent
+  model?: string
+  added_keywords?: string[]
+  skipped_keywords?: string[]
+}> {
+  return request(`/user/intent`, {
+    method: 'POST',
+    body: JSON.stringify({ user_id: userId, text, apply_keywords: applyKeywords }),
+  }, 120_000)
+}
+
+/** ⭐ AI 周报：本周刷了什么 / 挖到几个宝藏 / 下一步学什么。 */
+export function getWeeklyReport(
+  userId: number,
+  days = 7,
+  force = false,
+): Promise<{ ok: boolean; reason?: string; report?: WeeklyReport; stats?: WeeklyStats; cached?: boolean; model?: string }> {
+  const p = new URLSearchParams({ user_id: String(userId), days: String(days), force: String(force) })
+  return request(`/user/report?${p}`, {}, 180_000)
 }

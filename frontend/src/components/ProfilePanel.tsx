@@ -3,6 +3,7 @@ import type { FC } from 'react'
 import type {
   CustomKeyword,
   MeResponse,
+  ParsedIntent,
   ProfileInsight,
   ProfileItem,
   QueueStats,
@@ -19,6 +20,7 @@ import {
   getQueueStats,
   getUserProfile,
   githubLoginUrl,
+  parseIntent,
   rebuildUserProfile,
   summarizeProfile,
 } from '@/lib/api'
@@ -34,6 +36,8 @@ interface Props {
   /** 同步 GitHub 实证数据（自建仓库 + 点星仓库） */
   onSync: () => void
   onLogout: () => void
+  /** 打开 AI 周报 */
+  onOpenReport?: () => void
 }
 
 /**
@@ -44,7 +48,15 @@ interface Props {
  *   用户能看到画像里有没有跑偏的词、缓存池还剩多少、
  *   最近一次补货是朝哪个方向抓的。
  */
+/** 意图解析的现成示例 —— 普通用户不知道该怎么描述，给几个能直接点的 */
+const INTENT_EXAMPLES = [
+  '我想找能在本地跑、支持声音克隆、最好带界面的 TTS 项目',
+  '我想找能自己部署的 RSS 阅读器，要简洁不要花哨',
+  '找一些适合入门的向量数据库项目，最好是 Python 的',
+]
+
 const ProfilePanel: FC<Props> = ({
+  onOpenReport,
   userId,
   user,
   open,
@@ -63,12 +75,50 @@ const ProfilePanel: FC<Props> = ({
   const [insight, setInsight] = useState<ProfileInsight | null>(null)
   const [busyInsight, setBusyInsight] = useState(false)
 
+  // ── AI 意图解析（大白话 → keywords/tags/exclude）──
+  const [intentText, setIntentText] = useState('')
+  const [intentBusy, setIntentBusy] = useState(false)
+  const [intentMsg, setIntentMsg] = useState<string | null>(null)
+  const [intent, setIntent] = useState<ParsedIntent | null>(null)
+
   // ── 自定义关键词（用户手动维护，可驱动爬虫抓取）──
   const [kws, setKws] = useState<CustomKeyword[]>([])
   const [kwInput, setKwInput] = useState('')
   const [kwBusy, setKwBusy] = useState(false)
   const [crawling, setCrawling] = useState(false)
   const [crawlInfo, setCrawlInfo] = useState<string | null>(null)
+
+  /** AI 意图解析：把描述变成关键词（并加入列表 → 驱动爬虫） */
+  const runIntent = useCallback(async (): Promise<void> => {
+    const text = intentText.trim()
+    if (text.length < 2 || intentBusy) return
+    setIntentBusy(true)
+    setIntentMsg(null)
+    try {
+      const r = await parseIntent(userId, text, true)
+      if (r.ok && r.intent) {
+        setIntent(r.intent)
+        const added = r.added_keywords?.length ?? 0
+        const skipped = r.skipped_keywords?.length ?? 0
+        setIntentMsg(
+          added > 0
+            ? `✓ 已加入 ${added} 个关键词${skipped ? `（${skipped} 个重复/超限已跳过）` : ''}，爬虫会按它们去抓`
+            : skipped > 0
+              ? `这些关键词已在列表里或已达上限（${skipped} 个）`
+              : '已解析',
+        )
+        setIntentText('')
+        const fresh = await getCustomKeywords(userId).catch(() => null)
+        if (fresh) setKws(fresh.keywords)
+      } else {
+        setIntentMsg(r.reason || '解析失败，换个说法再试')
+      }
+    } catch (e) {
+      setIntentMsg(e instanceof Error ? e.message : '解析失败')
+    } finally {
+      setIntentBusy(false)
+    }
+  }, [intentText, intentBusy, userId])
 
   const load = useCallback(async (): Promise<void> => {
     setErr(null)
@@ -461,6 +511,114 @@ const ProfilePanel: FC<Props> = ({
               )}
           </div>
         )}
+
+        {/* ── ⭐ AI 周报入口 ── */}
+        <button
+          className="card w-full text-left p-4 mt-3 border border-accent/20 bg-accent/[0.03]
+                     hover:bg-accent/[0.06] transition-colors"
+          onClick={() => onOpenReport?.()}
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-[13px] text-ink">✦ 本周发现报告</span>
+            <div className="flex-1" />
+            <span className="text-[11.5px] text-accent">查看 ›</span>
+          </div>
+          <p className="text-[11px] text-ink-muted mt-1 leading-relaxed">
+            AI 把你这一周刷过的仓库总结成：挖到几个宝藏、为什么值得看、下一步学什么 —— 还能导出成分享图。
+          </p>
+        </button>
+
+        {/* ── ⭐ AI 意图解析 · 用大白话描述你想找什么 ──
+            为什么放在关键词上面：原设计要求用户自己知道该填 `tts`、`voice conversion`、`sovits`，
+            这是"懂技术标签"的门槛。这里把门槛降到"会打字" ——
+            写一句话，AI 负责翻译成 keywords/tags/exclude，并直接写进下方关键词列表。 */}
+        <div className="card p-4 mt-3 border border-accent/20 bg-accent/[0.03]">
+          <div className="flex items-center gap-2">
+            <span className="text-[13px] text-ink-soft">✦ 用一句话告诉 AI 你想找什么</span>
+            <span className="text-[10.5px] text-ink-faint">AI 意图解析</span>
+          </div>
+          <p className="text-[11px] text-ink-muted mt-1 leading-relaxed">
+            不会写技术标签没关系 —— 描述你要什么，AI 会提取出 GitHub 能用的英文关键词并加入下方列表。
+          </p>
+
+          <textarea
+            value={intentText}
+            onChange={(e) => setIntentText(e.target.value)}
+            placeholder="例：我想找能在本地跑、支持声音克隆、最好带界面的 TTS 项目"
+            rows={2}
+            maxLength={200}
+            className="w-full mt-2.5 bg-canvas border border-hairline rounded-pearl px-3 py-2
+                       text-[13px] leading-relaxed text-ink placeholder:text-ink-faint
+                       outline-none resize-none"
+          />
+
+          {/* 示例：点一下直接填进去（普通用户不知道该怎么描述，给现成的） */}
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {INTENT_EXAMPLES.map((ex) => (
+              <button
+                key={ex}
+                className="chip h-6 bg-canvas text-ink-muted border border-hairline
+                           hover:text-ink transition-colors"
+                onClick={() => setIntentText(ex)}
+              >
+                {ex.length > 18 ? `${ex.slice(0, 18)}…` : ex}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2 mt-2.5">
+            <button
+              className="btn-primary h-9 px-4 text-[13px]"
+              onClick={() => void runIntent()}
+              disabled={intentBusy || intentText.trim().length < 2}
+            >
+              {intentBusy ? 'AI 解析中…' : '解析并加入关键词'}
+            </button>
+            {intentMsg && (
+              <span className="text-[11.5px] text-ink-muted leading-tight">{intentMsg}</span>
+            )}
+          </div>
+
+          {/* 解析结果：让用户看到 AI 到底理解成了什么（可验证、可纠正） */}
+          {intent && (
+            <div className="mt-3 pt-3 border-t border-hairline space-y-2">
+              <p className="text-[11.5px] text-ink leading-relaxed">
+                <span className="text-ink-faint">AI 理解：</span>
+                {intent.summary}
+              </p>
+              {intent.keywords.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10.5px] text-ink-faint shrink-0">检索词</span>
+                  {intent.keywords.map((k) => (
+                    <span key={k} className="chip h-6 bg-canvas text-accent border border-accent/25">
+                      {k}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {intent.tags.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10.5px] text-ink-faint shrink-0">形态偏好</span>
+                  {intent.tags.map((k) => (
+                    <span key={k} className="chip h-6 bg-canvas text-ink-soft border border-hairline">
+                      {k}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {intent.exclude.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10.5px] text-ink-faint shrink-0">排除</span>
+                  {intent.exclude.map((k) => (
+                    <span key={k} className="chip h-6 bg-canvas text-risk-danger border border-risk-danger/25">
+                      {k}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* ── 自定义关键词 · 驱动爬虫 ── */}
         <div className="card p-4 mt-3">

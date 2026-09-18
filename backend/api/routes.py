@@ -99,6 +99,13 @@ class EventIn(BaseModel):
     rank_position: int | None = None
 
 
+class IntentIn(BaseModel):
+    """自然语言检索意图。"""
+    user_id: int = 1
+    text: str = ""
+    apply_keywords: bool = True     # 是否把解析出的 keywords 写进自定义关键词（驱动爬虫）
+
+
 class BriefIn(BaseModel):
     """AI 项目速读请求。"""
     user_id: int = 1
@@ -792,6 +799,44 @@ def rebuild_user_profile(user_id: int = Query(1)) -> dict[str, Any]:
         "by_source": sources,
         "cold_start": tv.size < COLD_START_MIN_TAGS,
     }
+
+
+@router.post("/user/intent")
+def post_user_intent(payload: IntentIn) -> dict[str, Any]:
+    """⭐ AI 意图解析：一句大白话 → 结构化检索意图（keywords / tags / exclude）。
+
+    把门槛从"懂技术标签"降到"会打字"：
+      用户写「我想找能在本地跑、支持声音克隆、最好带界面的 TTS 项目」，
+      解析出 {"keywords":["tts","voice-cloning","local-inference"],
+              "tags":["webui"], "exclude":["api-wrapper"]}，
+      并把 keywords 写进自定义关键词（爬虫随即按它去 GitHub 抓）。
+    """
+    from api.intent_service import parse_intent, save_intent
+
+    with get_conn() as conn:
+        out = parse_intent(conn, payload.user_id, payload.text,
+                           apply_keywords=payload.apply_keywords)
+        if out.get("ok"):
+            save_intent(conn, payload.user_id, payload.text,
+                        out["intent"], out.get("model"))
+    return out
+
+
+@router.get("/user/report")
+def get_user_report(
+    user_id: int = Query(1),
+    days: int = Query(7, ge=1, le=90),
+    force: bool = Query(False, description="忽略缓存重新生成（仍消耗 1 次 LLM 调用）"),
+) -> dict[str, Any]:
+    """⭐ AI 周报：本周刷了什么 / 挖到几个宝藏 / 下一步学什么。
+
+    事实（曝光、深读、收藏、项目清单）由 SQL 算好再交给 LLM ——
+    LLM 只负责**把事实写成话**，不允许编造项目。
+    """
+    from api.report_service import generate_report
+
+    with get_conn() as conn:
+        return generate_report(conn, user_id, days=days, force=force)
 
 
 @router.get("/user/keywords")
