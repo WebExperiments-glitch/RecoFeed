@@ -53,8 +53,11 @@ const App: FC = () => {
   const [activeItem, setActiveItem] = useState<FeedItem | null>(null)
   /** 侧滑抽屉（项目详情）是否展开 */
   const [drawerOpen, setDrawerOpen] = useState(false)
-  /** 信息流分档：全部 / 热门 / 遗珠 */
-  const [feedMode, setFeedMode] = useState<FeedMode>('all')
+  /** 信息流分档：探索（全部）/ 热门 / 遗珠
+   *  ⭐ 默认进「遗珠」：本产品的立身之本就是挖被埋没的项目，
+   *     默认给"全部"会让用户第一眼看到 4 万星的仓库，产生"这也配叫遗珠？"的预期落差。
+   *     想逛大盘的再切到「探索」。 */
+  const [feedMode, setFeedMode] = useState<FeedMode>('gem')
 
   const fetchingRef = useRef(false)
   /** 首屏加载失败的重试计数（后端瞬时抖动不该直接甩一屏报错） */

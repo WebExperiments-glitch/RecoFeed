@@ -7,6 +7,7 @@ import {
   isForgotten,
   licenseBadge,
   timeAgo,
+  formatSize,
 } from '@/lib/format'
 import { trackLike, trackSwipe } from '@/lib/events'
 import { likeRepo, unlikeRepo } from '@/lib/api'
@@ -372,9 +373,8 @@ const FeedCard: FC<Props> = ({
                 <StatBox label="Issue" value={String(item.stats?.open_issues ?? 0)} />
                 <StatBox
                   label="体积"
-                  value={
-                    item.stats ? `${Math.max(1, Math.round(item.stats.size_kb / 1024))} MB` : '—'
-                  }
+                  // ⚠️ 不再 Math.max(1, …)：缺数据时凭空显示"1 MB"是撒谎，交给 formatSize 显示 —
+                  value={item.stats ? formatSize(item.stats.size_kb) : '—'}
                 />
                 <StatBox
                   label="创建"

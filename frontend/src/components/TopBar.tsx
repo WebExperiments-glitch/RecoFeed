@@ -48,7 +48,7 @@ const TopBar: FC<Props> = ({
             遗珠是本产品的立身之本 —— 让被埋没的低星好项目浮上来 */}
         <div className="flex items-center rounded-full bg-pearl border border-hairline p-0.5">
           {([
-            ['all', '全部'],
+            ['all', '探索'],
             ['hot', '热门'],
             ['gem', '遗珠'],
           ] as [FeedMode, string][]).map(([k, label]) => (

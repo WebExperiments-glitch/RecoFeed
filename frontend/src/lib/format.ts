@@ -135,3 +135,39 @@ export function hashHue(s: string): number {
   }
   return Math.abs(h) % 360
 }
+
+
+/**
+ * 仓库体积的人类可读格式。
+ *
+ * ⚠️ 为什么单独写：原来两处各写各的 —— 详情面板用 `(kb/1024).toFixed(1)` → 缺数据时
+ * 显示「0.0 MB」（看着像坏了），卡片用 `Math.max(1, round(kb/1024))` → 缺数据时显示「1 MB」
+ * （凭空捏造）。缺数据就该老老实实显示 —。
+ */
+export function formatSize(kb?: number | null): string {
+  const n = Number(kb ?? 0)
+  if (!n || n <= 0) return '—'
+  if (n < 1024) return `${Math.round(n)} KB`
+  const mb = n / 1024
+  if (mb < 1024) return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`
+  return `${(mb / 1024).toFixed(1)} GB`
+}
+
+/**
+ * README 是否是"实质内容"。
+ *
+ * 爬虫抓不到真 README 时会写入「# 仓库名 + 一句话简介」这种兜底文本（实测约 79 字），
+ * 对这种仓库摆一个「读完整 README」的入口是很滑稽的 —— 用户点进去只有一行字。
+ */
+export function isThinReadme(
+  readme?: string | null,
+  name?: string | null,
+  description?: string | null,
+): boolean {
+  const t = (readme ?? '').trim()
+  if (t.length < 200) return true
+  const norm = (x: string): string => (x ?? '').toLowerCase().replace(/[\s\W_]+/g, '')
+  const n = norm(t)
+  return n === norm(name ?? '') || n === norm(description ?? '') ||
+    n === norm(name ?? '') + norm(description ?? '')
+}
