@@ -284,7 +284,7 @@ GitHub 回调：换 token → 建/取用户 → 签发会话 → 302 回前端
 
 ---
 
-## 七、翻译（OpenRouter 免费模型 + DeepSeek 付费兜底）
+## 七、翻译（Agnes AI 免费档模型级联）
 
 ### `POST /api/repos/{repo_id}/translate`
 翻译仓库简介 + README 为中文（带 SQLite 缓存与限流）。
@@ -385,7 +385,8 @@ GitHub 回调：换 token → 建/取用户 → 签发会话 → 302 回前端
 |---|---|---|
 | 本地限流总开关 | `LLM_LOCAL_RATE_LIMIT_ENABLED` | **默认关闭**（不限流）；`RECOFEED_LLM_LIMIT=1` 可恢复 |
 | 免费模型限流（开关打开时） | 120 次/分钟、2000 次/天 | 本地先行拒绝，不打上游 |
-| DeepSeek 付费兜底 | **15 次/天**（始终生效） | 独立限额，防止烧钱包 |
+| 模型级联 | `agnes-2.5-flash` → `agnes-3.0-flash` → `agnes-2.0-flash` | 任一模型 429/失败自动换下一个 |
+| 推理模式 | `chat_template_kwargs.enable_thinking=false` | **必须关闭**：实测 4~10 倍提速（11.7s → 1.2s）|
 | 模型冷却（反应式） | 单模型 429 后 60s / 全模型 429 后全局 20s | 不是提前拒绝，只在撞到上游限流时短暂避让 |
 | 爬虫频控 | 60s 一次 | GitHub search 限流 10/min |
 | 关键词上限 | 12 个/用户 | — |

@@ -394,13 +394,23 @@ def explain_cards(conn: sqlite3.Connection, user_id: int,
             "stars": int(r["stars"] or 0),
         })
 
+    # ⭐ 把个人模型匹配度喂给 LLM（否则出现"AI 说不合口味 / 卡片却 1.00"的自相矛盾）
+    try:
+        from ml.user_model import score_repos
+        _ps = score_repos(conn, user_id, [c["id"] for c in cards])
+    except Exception:
+        _ps = {}
+    for c in cards:
+        c["personal"] = round(_ps.get(c["id"], -1), 2)
+
     user_prompt = (
         f"用户画像：{json.dumps(ctx['tags'][:12], ensure_ascii=False)}\n"
         f"用户在做的项目：{json.dumps(ctx['owned'][:6], ensure_ascii=False)}\n"
         f"用户点星过的项目：{json.dumps(ctx['starred'][:8], ensure_ascii=False)}\n\n"
-        f"候选仓库（repo_id / 名称 / 简介 / topics / 星数）：\n"
+        f"候选仓库（repo_id | 名称 | 简介 | topics | 星数 | 个人匹配度）：\n"
         + "\n".join(
-            f"{c['id']} | {c['name']} | {c['desc']} | {','.join(c['topics'])} | ★{c['stars']}"
+            f"{c['id']} | {c['name']} | {c['desc']} | {','.join(c['topics'])} "
+            f"| ★{c['stars']} | 匹配度 {c.get('personal')}"
             for c in cards
         )
     )
@@ -410,13 +420,27 @@ def explain_cards(conn: sqlite3.Connection, user_id: int,
                 "explanations": {str(k): v for k, v in cached.items()},
                 "cached": len(cached), "generated": 0}
 
+    # ⭐ key 容忍两种形态：数字 repo_id（提示词要求）或仓库名（模型偶尔不听话）。
+    #    实测 Agnes 用 full_name 当 key，旧解析器只认数字 → 整批丢弃、一条都不生成。
+    by_name: dict[str, int] = {}
+    for c in cards:
+        nm = str(c["name"]).lower()
+        by_name[nm] = int(c["id"])
+        by_name[nm.split("/")[-1]] = int(c["id"])
+
+    def _resolve(key: str) -> int | None:
+        k = str(key).strip()
+        if k.isdigit() and int(k) in todo:
+            return int(k)
+        return by_name.get(k.lower())
+
     generated = 0
-    for k, v in data.items():
-        key = str(k).strip()
-        if not key.isdigit():
+    for k, v in (data.items() if isinstance(data, dict) else []):
+        rid = _resolve(k)
+        if rid is None:
             continue
-        if int(key) not in todo:
-            continue
+        if isinstance(v, dict):
+            v = v.get("why") or v.get("reason") or v.get("text") or ""
         text = str(v).strip()[:80]
         if not text:
             continue
@@ -426,9 +450,9 @@ def explain_cards(conn: sqlite3.Connection, user_id: int,
                ON CONFLICT(user_id, repo_id) DO UPDATE SET
                    fingerprint = excluded.fingerprint, text = excluded.text,
                    model = excluded.model, created_at = datetime('now')""",
-            (user_id, int(key), fp, text, model),
+            (user_id, rid, fp, text, model),
         )
-        cached[int(key)] = text
+        cached[rid] = text
         generated += 1
 
     return {"ok": True, "explanations": {str(k): v for k, v in cached.items()},

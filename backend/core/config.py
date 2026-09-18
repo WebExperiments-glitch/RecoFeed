@@ -233,16 +233,17 @@ RECALL_QUOTA: dict[str, int] = {
 def _load_llm_keys() -> dict[str, str]:
     """LLM key：优先环境变量，其次 backend/core/llm_local.json（已 gitignore）。"""
     keys = {
+        "agnes": os.getenv("AGNES_API_KEY", "").strip(),
         "openrouter": os.getenv("OPENROUTER_API_KEY", "").strip(),
         "deepseek": os.getenv("DEEPSEEK_API_KEY", "").strip(),
     }
-    if keys["openrouter"] and keys["deepseek"]:
+    if keys["agnes"]:
         return keys
     try:
         import json
         p = BACKEND_DIR / "core" / "llm_local.json"
         data = json.loads(p.read_text(encoding="utf-8"))
-        for name in ("openrouter", "deepseek"):
+        for name in ("agnes", "openrouter", "deepseek"):
             if not keys[name]:
                 keys[name] = str(data.get(f"{name}_api_key", "")).strip()
     except Exception:
@@ -250,8 +251,13 @@ def _load_llm_keys() -> dict[str, str]:
     return keys
 
 _LLM_KEYS = _load_llm_keys()
+AGNES_API_KEY = _LLM_KEYS["agnes"]
 OPENROUTER_API_KEY = _LLM_KEYS["openrouter"]
 DEEPSEEK_API_KEY = _LLM_KEYS["deepseek"]
+
+# Agnes AI —— 国内接入点（国际版为 apihub.agnes-ai.com，实测国际版不接受该 key）
+#   免费档模型：agnes-2.5-flash（1.15s）/ agnes-3.0-flash（1.98s）/ agnes-2.0-flash
+AGNES_BASE_URL = os.getenv("AGNES_BASE_URL", "https://api.agnes-ai.cn/v1")
 
 OPENROUTER_BASE_URL = os.getenv(
     "OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
@@ -259,13 +265,22 @@ DEEPSEEK_BASE_URL = os.getenv(
     "DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 
 LLM_CHAIN: list[dict[str, str]] = [
-    {"id": "nvidia/nemotron-3-super-120b-a12b:free", "provider": "openrouter"},
-    {"id": "nvidia/nemotron-3-ultra-550b-a55b:free", "provider": "openrouter"},
-    {"id": "inclusionai/ling-3.0-flash-vl:free", "provider": "openrouter"},
-    {"id": "deepseek-flash", "provider": "deepseek"},
+    # ⭐ 主力：Agnes 2.5 Flash —— 实测 1.15s/篇（关闭 thinking 后），翻译质量稳定
+    {"id": "agnes-2.5-flash", "provider": "agnes"},
+    # 备用：Agnes 3.0 Flash —— 新一代（512K 上下文 / 长任务更强），实测 1.98s/篇
+    {"id": "agnes-3.0-flash", "provider": "agnes"},
+    # 兜底：2.0 Flash（官方已标记 deprecated，但免费且可用，留作最后一道）
+    {"id": "agnes-2.0-flash", "provider": "agnes"},
 ]
 
-# DeepSeek 是付费模型：单独设日限额，防止免费模型集体故障时烧穿钱包
+# ⚠️ 关闭 thinking（推理）模式是**决定性优化**，实测：
+#      2.5-flash  11.73s → 1.15s（10×）
+#      3.0-flash   8.66s → 1.98s（4.4×）
+#    翻译/解释这类任务不需要推理，开着只会烧时间和额度。见 translate_service._chat。
+AGNES_DISABLE_THINKING = True
+
+# 付费兜底（DeepSeek）已停用：key 不再配置，链上也没有它的条目。
+# 保留常量是为了兼容旧代码路径（值为空时该 provider 会被自动跳过）。
 DEEPSEEK_MAX_PER_DAY = 15
 
 # 防护参数 —— 免费档限流（未充值账户官方限制：20 req/min、50 req/day）

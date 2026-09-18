@@ -155,13 +155,28 @@ python backend/jobs/train_personal_model.py --user <用户id>
 
 ```json
 {
-  "openrouter_api_key": "sk-or-v1-…",
-  "deepseek_api_key": "sk-…"
+  "agnes_api_key": "sk-…"
 }
 ```
 
-级联链：OpenRouter 免费档 3 个模型 → DeepSeek 付费兜底（日限额 15，防止烧钱包）。  
+**默认接入 [Agnes AI](https://agnes-ai.com)**（免费档，OpenAI 兼容），接入点 `https://api.agnes-ai.cn/v1`。
+模型链：`agnes-2.5-flash` → `agnes-3.0-flash` → `agnes-2.0-flash`（任一失败自动换下一个）。
+
+| 实测项 | agnes-2.5-flash | agnes-3.0-flash |
+|---|---|---|
+| 延迟（关闭 thinking）| **1.15s** | 1.98s |
+| 延迟（默认 thinking）| 11.73s | 8.66s |
+| 上下文 / 最大输出 | 512K / 65.5K | 512K / 65.5K |
+| 计费 | 当前 $0 | 当前 $0 |
+
+> ⚠️ **必须显式关闭 thinking**：`chat_template_kwargs.enable_thinking=false`。
+> 实测这是 4~10 倍提速的关键（翻译/解释不需要推理），默认开启还会造成延迟抖动（最慢 22s）。
+
 本地限流默认**关闭**（想打开：环境变量 `RECOFEED_LLM_LIMIT=1`）；用量始终记账，`GET /api/translate/status` 可查。
+
+> 🔐 **提交前必跑密钥扫描**：`python scripts/check_secrets.py`（工作区 + 全部 git 历史）。
+> 背景：本项目曾把真实 API key 硬编码在 benchmark 脚本里，开源后被 GitGuardian 告警 ——
+> 密钥一旦进过公开仓库**必须轮换**，删文件、改历史都不够（历史对象 GitHub 不回收）。
 
 ### GitHub 登录
 
