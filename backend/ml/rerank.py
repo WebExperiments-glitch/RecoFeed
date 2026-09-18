@@ -119,32 +119,52 @@ def rerank(conn: sqlite3.Connection, user_id: int, items: list[Any],
         pass
 
     # ⭐ 硬门槛：个人分低于阈值的一律踢掉（不再参与排序，也不会出现在 Feed 头部）
+    #
+    #    ⚠️ 但"**没有个人分**" ≠ "个人分是 0"：
+    #       新抓进来的仓库在向量化完成前没有分数，旧逻辑用 scores.get(id, 0.0)
+    #       把它们当成"明确不感兴趣"直接踢掉 —— 结果是**新仓库永远出不来**，
+    #       补货越勤越无效（实测定向抓了 611 个遗珠，遗珠档还是只剩 4 张）。
+    #       这里把"未打分"与"低分"区分开：未打分的**默认放过**（用中性分参与排序）。
+    def _p(it):
+        """返回个人分；未打分为 None。"""
+        v = scores.get(get_repo_id(it))
+        return None if v is None else float(v)
+
+    UNSCORED_NEUTRAL = 0.5      # 未打分的中性分（既不顶到最前，也不沉到底）
     kept = [it for it in items
-            if scores.get(get_repo_id(it), 0.0) >= MIN_PERSONAL_SCORE]
+            if _p(it) is None or _p(it) >= MIN_PERSONAL_SCORE]
     dropped = len(items) - len(kept)
     if not kept:
         # 全军覆没说明这批候选与该用户完全不对路：宁可给"最接近的几条"，
         # 也不能返回空屏（空屏会让用户以为服务坏了）。
-        kept = sorted(items, key=lambda it: -scores.get(get_repo_id(it), 0.0))[:FALLBACK_KEEP]
+        kept = sorted(items,
+                      key=lambda it: -(_p(it) if _p(it) is not None else UNSCORED_NEUTRAL)
+                      )[:FALLBACK_KEEP]
         info["fallback"] = True
 
-    ranked = blend_and_sort(kept, scores, get_repo_id, get_score)
+    # 未打分的仓库用中性分参与融合排序（否则 .get(id, 0) 会把它们一律沉底）
+    scores_for_blend = dict(scores)
+    for it in kept:
+        rid = get_repo_id(it)
+        if rid not in scores_for_blend:
+            scores_for_blend[rid] = UNSCORED_NEUTRAL
+    ranked = blend_and_sort(kept, scores_for_blend, get_repo_id, get_score)
 
     # ⭐ 尾部兜底：门槛踢完后如果不够一页，用"个人分最高的被踢项"补满（排在末尾）。
     #
-    #    ⚠️ 2026-09-18 默认**关闭**。原因来自用户/评测反馈：
-    #       补进来的都是"个人模型判定不合口味"的卡片，卡片上还会写着
-    #       "偏 XX 方向，可能不合你的口味" —— 用户看到这种卡片会直接失去信任
-    #       （评测原话：这种基于泛标签的强行匹配"极大消耗了用户的耐心和信任"）。
-    #       宁可一页少几张（前端会自动补货、并给"继续刷"入口），也不要塞不合口味的。
-    #       想恢复旧行为：把下面常量改成 True。
-    TAIL_FILL_ENABLED = False
+    #    ⚠️ 2026-09-18 调整：原来"只关不填"会让页只剩 1~4 张（实测遗珠档只剩 1 张），
+    #       体验更差。改为**软下限**：只补个人分 ≥ SOFT_FLOOR 的 ——
+    #       那些 p≈0.01 的"明确不合口味"永远进不来（它们正是评测里被吐槽的
+    #       "写着'可能不合你的口味'还硬推给我"的卡片），但分数只是略低一点的仍可补位。
+    SOFT_FLOOR = 0.05
     filled = 0
-    if TAIL_FILL_ENABLED and len(ranked) < min_keep:
+    if len(ranked) < min_keep:
         passed = {get_repo_id(it) for it in ranked}
         filler = sorted(
-            (it for it in items if get_repo_id(it) not in passed),
-            key=lambda it: -scores.get(get_repo_id(it), 0.0),
+            (it for it in items
+             if get_repo_id(it) not in passed
+             and (_p(it) is None or _p(it) >= SOFT_FLOOR)),
+            key=lambda it: -(_p(it) if _p(it) is not None else UNSCORED_NEUTRAL),
         )[: max(0, min_keep - len(ranked))]
         ranked = ranked + filler
         filled = len(filler)
@@ -157,7 +177,7 @@ def rerank(conn: sqlite3.Connection, user_id: int, items: list[Any],
         "filled_from_dropped": filled,
         "threshold": MIN_PERSONAL_SCORE,
         "blend": BLEND_PERSONAL,
-        "scores": {get_repo_id(it): round(scores.get(get_repo_id(it), 0.0), 3)
+        "scores": {get_repo_id(it): round(scores_for_blend[get_repo_id(it)], 3)
                    for it in ranked},
         "top": [{"repo_id": get_repo_id(it),
                  "personal": round(scores.get(get_repo_id(it), -1), 3)}

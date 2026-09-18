@@ -372,6 +372,24 @@ _SECTION_TITLE = re.compile(
 _BADGE_ONLY = re.compile(r"^[\s\W_]*$")
 
 
+def _strip_html_noise(md: str) -> str:
+    """剥掉 README 里的 HTML 噪声（注释、纯布局标签）。
+
+    ⚠️ 为什么要做：很多 README 是 HTML 驱动的（badge 墙、居中容器），
+       markdown 渲染器出于安全会把原始 HTML 当**纯文本**显示，
+       于是卡片/抽屉里满屏 `<!-- DO NOT EDIT -->`、`<div align="center">`。
+       这里只做"去掉噪声"，不改 markdown 结构；不做完整 HTML 解析（避免引入依赖与风险）。
+    """
+    if not md:
+        return ""
+    import re as _re
+    t = _re.sub(r"<!--.*?-->", " ", md, flags=_re.DOTALL)      # 注释
+    t = _re.sub(r"<br\s*/?>", "\n", t, flags=_re.I)            # <br> → 换行
+    t = _re.sub(r"</(p|div|h[1-6]|li|tr)>", "\n", t, flags=_re.I)
+    t = _re.sub(r"<[^>]{0,200}>", " ", t)                       # 其余标签整体去掉
+    return t
+
+
 def readme_excerpt(md: str | None, limit: int = 420) -> str:
     """把 README 压成一段纯文本摘要（给 Feed 卡片用）。
 

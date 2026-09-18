@@ -27,6 +27,7 @@ import type {
   TranslateResponse,
   TranslateStatus,
   UserProfile,
+  RepoBrief,
 } from '@/types/api'
 import { getToken } from '@/lib/session'
 
@@ -375,4 +376,16 @@ export function summarizeProfile(
     { method: 'POST' },
     150_000,
   )
+}
+
+/** AI 项目速读：把一个仓库的 README 变成结构化简介（按需调用，服务端有缓存）。 */
+export function getBrief(
+  userId: number,
+  repoIds: number[],
+  force = false,
+): Promise<{ ok: boolean; briefs: Record<string, { ok: boolean; brief?: RepoBrief; cached?: boolean; model?: string; reason?: string }> }> {
+  return request(`${BASE}/ml/brief`, {
+    method: 'POST',
+    body: JSON.stringify({ user_id: userId, repo_ids: repoIds, force }),
+  }, 180_000)
 }

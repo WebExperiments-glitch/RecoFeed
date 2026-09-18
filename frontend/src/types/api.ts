@@ -32,6 +32,20 @@ export interface RepoStats {
 /** 信息流分档：all=全部 / hot=热门（≥1000 星）/ gem=遗珠（<1000 星） */
 export type FeedMode = 'all' | 'hot' | 'gem'
 
+/** AI 项目速读（README → 结构化简介） */
+export interface RepoBrief {
+  /** 一句话定位（≤40 字） */
+  one_liner: string
+  /** 技术栈 */
+  stack: string[]
+  /** 核心亮点（优先取自 README 的 Features / Quick Start） */
+  highlights: string[]
+  /** 适合谁用 */
+  audience: string
+  /** 成熟度判断 */
+  maturity: string
+}
+
 export interface FeedItem {
   repo_id: number
   full_name: string
@@ -44,6 +58,8 @@ export interface FeedItem {
   personal_score?: number
   /** 仓库概览与打分明细（桌面端右列数据源） */
   stats?: RepoStats
+  /** AI 速读（仅当此前生成过、命中缓存时才随 feed 下发） */
+  brief?: RepoBrief
   language: string | null
   stars: number
   topics: string[]
