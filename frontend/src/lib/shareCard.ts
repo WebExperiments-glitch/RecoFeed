@@ -249,3 +249,135 @@ export async function downloadShareCard(item: FeedItem, extra: {
   setTimeout(() => URL.revokeObjectURL(url), 4000)
   return 'download'
 }
+
+/** 周报分享图：小红书/B站动态那种"一眼看到结论"的排版 */
+export async function makeReportCard(
+  report: { headline: string; stats_comment: string;
+            highlights: { repo: string; why: string }[];
+            learning_path: string[]; next_step: string },
+  stats?: { impressions: number; deep_reads: number; clicks: number; likes: number } | null,
+): Promise<Blob | null> {
+  const canvas = document.createElement('canvas')
+  canvas.width = W
+  canvas.height = H
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return null
+
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, W, H)
+  const c: Ctx = { ctx, y: PAD, x: PAD }
+  ctx.textBaseline = 'top'
+
+  // 品牌 + 周期
+  ctx.fillStyle = INK
+  ctx.font = `600 34px ${FONT_STACK}`
+  ctx.fillText('RecoFeed', PAD, c.y)
+  ctx.font = `400 26px ${FONT_STACK}`
+  ctx.fillStyle = INK_MUTED
+  ctx.fillText('我的本周发现 · AI 周报', PAD + 210, c.y + 8)
+  c.y += 72
+  ctx.strokeStyle = HAIRLINE
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.moveTo(PAD, c.y)
+  ctx.lineTo(W - PAD, c.y)
+  ctx.stroke()
+  c.y += 52
+
+  // 大字结论
+  drawParagraph(c, report.headline, { size: 52, weight: '700', color: INK, lineHeight: 68, maxLines: 4, gapAfter: 20 })
+  if (report.stats_comment) {
+    drawParagraph(c, report.stats_comment, { size: 28, color: INK_MUTED, lineHeight: 40, maxLines: 3, gapAfter: 18 })
+  }
+
+  // 数据四宫格（用文字画）
+  if (stats) {
+    const cells: [string, number][] = [
+      ['刷过', stats.impressions], ['深读', stats.deep_reads],
+      ['点开', stats.clicks], ['收藏', stats.likes],
+    ]
+    ctx.font = `600 40px ${FONT_STACK}`
+    let x = PAD
+    for (const [label, v] of cells) {
+      ctx.fillStyle = INK
+      ctx.fillText(String(v), x, c.y)
+      ctx.font = `400 24px ${FONT_STACK}`
+      ctx.fillStyle = INK_MUTED
+      ctx.fillText(label, x, c.y + 52)
+      ctx.font = `600 40px ${FONT_STACK}`
+      x += 210
+    }
+    c.y += 104
+  }
+
+  ctx.strokeStyle = HAIRLINE
+  ctx.beginPath()
+  ctx.moveTo(PAD, c.y)
+  ctx.lineTo(W - PAD, c.y)
+  ctx.stroke()
+  c.y += 40
+
+  // 本周宝藏（最多 2 条）
+  if (report.highlights.length) {
+    ctx.font = `500 26px ${FONT_STACK}`
+    ctx.fillStyle = ACCENT
+    ctx.fillText('本周宝藏', PAD, c.y)
+    c.y += 42
+    for (const h of report.highlights.slice(0, 2)) {
+      drawParagraph(c, `· ${h.repo}`, { size: 32, weight: '600', color: INK, lineHeight: 42, maxLines: 1, gapAfter: 4 })
+      drawParagraph(c, h.why, { size: 26, color: INK_SOFT, lineHeight: 36, maxLines: 2, gapAfter: 14 })
+    }
+  }
+
+  // 学习路线（最多 3 条）
+  if (report.learning_path.length) {
+    ctx.font = `500 26px ${FONT_STACK}`
+    ctx.fillStyle = ACCENT
+    ctx.fillText('给你的路线', PAD, c.y)
+    c.y += 42
+    report.learning_path.slice(0, 3).forEach((x, i) => {
+      drawParagraph(c, `${i + 1}. ${x}`, { size: 26, color: INK_SOFT, lineHeight: 36, maxLines: 2, gapAfter: 8 })
+    })
+  }
+
+  // 底部
+  ctx.strokeStyle = HAIRLINE
+  ctx.beginPath()
+  ctx.moveTo(PAD, H - 118)
+  ctx.lineTo(W - PAD, H - 118)
+  ctx.stroke()
+  ctx.font = `400 24px ${FONT_STACK}`
+  ctx.fillStyle = '#9a9aa0'
+  ctx.fillText('RecoFeed · 用抖音信息流范式挖被埋没的开源项目', PAD, H - 86)
+
+  return await new Promise<Blob | null>((resolve) => {
+    canvas.toBlob((b) => resolve(b), 'image/png', 0.95)
+  })
+}
+
+/** 生成并交付周报图（先剪贴板，后退回下载） */
+export async function shareReportCard(
+  report: Parameters<typeof makeReportCard>[0],
+  stats?: Parameters<typeof makeReportCard>[1],
+): Promise<'clipboard' | 'download' | 'failed'> {
+  const blob = await makeReportCard(report, stats)
+  if (!blob) return 'failed'
+  try {
+    const ClipboardItemCtor = (window as unknown as { ClipboardItem?: typeof ClipboardItem }).ClipboardItem
+    if (ClipboardItemCtor && navigator.clipboard?.write) {
+      await navigator.clipboard.write([new ClipboardItemCtor({ 'image/png': blob })])
+      return 'clipboard'
+    }
+  } catch {
+    /* 退回下载 */
+  }
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `recofeed-weekly-${new Date().toISOString().slice(0, 10)}.png`
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 4000)
+  return 'download'
+}
