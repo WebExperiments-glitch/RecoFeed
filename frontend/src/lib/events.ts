@@ -129,6 +129,18 @@ export function trackLike(repoId: number, liked: boolean): void {
   track({ repo_id: repoId, event_type: liked ? 'like' : 'skip' })
 }
 
+/**
+ * 「点开详情/读全文」= click 事件。
+ *
+ * ⚠️ 补这个事件是因为一个真 bug：后端 pool/state_machine 把 click/view 映射到
+ *    repo_pools.clicks，再用它算 ctr；但前端**从来没发过 click 事件**，
+ *    导致 clicks 全库恒为 0、ctr 恒为 0 —— CTR 作为排名信号一直是死的。
+ *    实测：3616 个仓库里 impressions>0 的有 92 个、likes>0 的 80 个，而 clicks 最大值为 0。
+ */
+export function trackClick(repoId: number): void {
+  track({ repo_id: repoId, event_type: 'click' })
+}
+
 export function trackStar(repoId: number): void {
   track({ repo_id: repoId, event_type: 'star_click' })
 }
