@@ -30,6 +30,9 @@ import httpx
 from fastapi import HTTPException
 
 from core.config import (
+    AGNES_API_KEY,
+    AGNES_BASE_URL,
+    AGNES_DISABLE_THINKING,
     DEEPSEEK_API_KEY,
     DEEPSEEK_BASE_URL,
     DEEPSEEK_MAX_PER_DAY,
@@ -111,6 +114,9 @@ _BATCH_LOCK_TIMEOUT = 30.0
 
 # ---------------------------------------------------------------- 限流
 def _is_paid(model_id: str) -> bool:
+    """付费模型才需要日限额保护。Agnes 免费档不算（用户："反正这个免费的"）。"""
+    if model_id.startswith("agnes"):
+        return False
     return model_id.startswith("deepseek")
 
 
@@ -196,12 +202,26 @@ def _mark_model_429(model_id: str) -> None:
 
 
 def _provider_ready(entry: dict[str, str]) -> bool:
-    from core.config import DEEPSEEK_API_KEY, OPENROUTER_API_KEY
+    from core.config import (AGNES_API_KEY, DEEPSEEK_API_KEY,
+                             OPENROUTER_API_KEY)
+    if entry["provider"] == "agnes":
+        return bool(AGNES_API_KEY)
     if entry["provider"] == "openrouter":
         return bool(OPENROUTER_API_KEY)
     if entry["provider"] == "deepseek":
         return bool(DEEPSEEK_API_KEY)
     return False
+
+
+def any_provider_ready() -> bool:
+    """链上是否至少有一个 provider 配好了 key。
+
+    ⭐ 泛化原因：原先把判定硬编码成 `openrouter 就绪 or deepseek 就绪`，
+       2026-09-18 换成 Agnes 后这两家 key 都撤了 → 该判定恒为 False
+       → **所有翻译被静默拦截**（请求 0.2s 返回、全是 None，看似"没内容可译"）。
+       改成遍历 LLM_CHAIN，换 provider 时不需要再改任何调用点。
+    """
+    return any(_provider_ready(e) for e in LLM_CHAIN)
 
 
 def _pick_model() -> dict[str, str] | None:
@@ -339,6 +359,26 @@ def _chat(provider: str, model_id: str, system: str, user: str,
                 {"role": "user", "content": user},
             ],
         }
+    elif provider == "agnes":
+        base, key = AGNES_BASE_URL, AGNES_API_KEY
+        headers = {
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": model_id,
+            "temperature": temperature,
+            "max_tokens": LLM_MAX_TOKENS,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+        }
+        # ⚠️ 必须显式关闭 thinking（推理）模式 —— 这是实测出来的决定性优化：
+        #       2.5-flash 11.73s → 1.15s（10×）；3.0-flash 8.66s → 1.98s（4.4×）
+        #    翻译与解释不需要推理，默认开着只会烧时间（还抖动，最慢 22s）。
+        if AGNES_DISABLE_THINKING:
+            payload["chat_template_kwargs"] = {"enable_thinking": False}
     else:
         raise RuntimeError(f"未知 provider: {provider}")
 
@@ -605,6 +645,11 @@ def _parse_desc_batch(content: str, n: int) -> dict[int, dict[str, str]]:
         # 清洗：部分模型会给译文包引号 / 冒号前后缀
         desc = desc.strip().strip('"“”「」『』').strip()
         name = name.strip().strip('"“”「」『』').strip()
+        # 清洗：模型偶尔自带字段名前缀（实测 "Name: 精选列表. Description: …"）
+        for pat in (r"^\s*(?:Description|描述)\s*[:：]\s*",):
+            desc = re.sub(pat, "", desc)
+        desc = re.sub(r"^\s*(?:Name|名称|仓库名)\s*[:：]\s*", "", desc)
+        name = re.sub(r"^\s*(?:Name|名称|仓库名)\s*[:：]\s*", "", name)
         out[idx] = {"zh_name": name, "zh_description": desc}
     return out
 
@@ -692,8 +737,7 @@ def _translate_descriptions_inner(
         if not desc:
             result[rid] = {"zh_name": None, "zh_description": None}
             continue
-        if not (_provider_ready({"provider": "openrouter"})
-                or _provider_ready({"provider": "deepseek"})):
+        if not any_provider_ready():
             result[rid] = {"zh_name": None, "zh_description": None}
             continue
         if _english_ratio(desc[:LLM_DESC_MAX_CHARS]) < 0.3:

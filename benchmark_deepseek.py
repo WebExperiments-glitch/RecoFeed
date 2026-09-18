@@ -5,7 +5,33 @@
 import time, json, sys
 import urllib.request
 
-API_KEY = "sk-e41e65b207fe40e6a2073423aa0a87c3"
+# ⚠️ 密钥绝不硬编码：优先读环境变量，其次读 backend/core/llm_local.json（已 gitignore）。
+#    2026-09-18 教训：本脚本曾在 9/12 把真实的 DeepSeek key 提交进 git，
+#    9/15 仓库转公开后被 GitGuardian 扫到并告警（key 已在公网 3 天）——
+#    唯一有效的补救是轮换密钥，删文件/改历史都不够（历史里的对象 GitHub 不回收）。
+def _load_api_key() -> str:
+    import json as _json
+    import os
+    import pathlib as _pathlib
+    env = os.getenv("DEEPSEEK_API_KEY")
+    if env:
+        return env.strip()
+    cfg = _pathlib.Path(__file__).resolve().parent / "backend" / "core" / "llm_local.json"
+    if cfg.exists():
+        try:
+            data = _json.loads(cfg.read_text(encoding="utf-8"))
+            key = (data.get("deepseek_api_key") or "").strip()
+            if key:
+                return key
+        except Exception:
+            pass
+    raise SystemExit(
+        "未找到 DeepSeek API Key。请设置环境变量 DEEPSEEK_API_KEY，"
+        "或填 backend/core/llm_local.json 的 deepseek_api_key 字段（该文件已被 gitignore）。"
+    )
+
+
+API_KEY = _load_api_key()
 URL = "https://api.deepseek.com/chat/completions"
 MODEL = "deepseek-flash"  # DeepSeek-V4.1-Flash 在 DeepSeek API 的 slug
 
