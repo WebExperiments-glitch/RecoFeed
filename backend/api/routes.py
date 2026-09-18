@@ -825,9 +825,17 @@ def auth_status(request: Request) -> dict[str, Any]:
 
 
 @router.get("/auth/github/login")
-def auth_github_login(request: Request) -> Any:
+def auth_github_login(
+    request: Request,
+    origin: str | None = Query(
+        None, description="发起登录的前端地址（如 http://localhost:5273），"
+                           "用于端口无关的回跳；缺省时用配置默认值"),
+) -> Any:
     """跳转到 GitHub 授权页（注册/登录二合一：GitHub 侧新用户自动带过来）。"""
+    import secrets as _secrets
+
     from core.config import AUTH_CONFIGURED, GITHUB_OAUTH_REDIRECT_URI
+    from api.auth_service import build_login_url, remember_origin
     if not AUTH_CONFIGURED:
         raise HTTPException(
             status_code=400,
@@ -835,7 +843,11 @@ def auth_github_login(request: Request) -> Any:
                    "client_id/secret 填进 backend/core/auth_local.json；"
                    "② 改用「令牌登录」POST /api/auth/github/pat（无需建 App）。",
         )
-    return RedirectResponse(build_login_url(GITHUB_OAUTH_REDIRECT_URI))
+    # ⭐ 把前端来源绑定到 state：dev server 端口可变（5173 被系统保留时可换 5273），
+    #    回跳地址必须跟着变，否则登录回来 ERR_CONNECTION_REFUSED。
+    state = _secrets.token_urlsafe(16)
+    remember_origin(state, origin)
+    return RedirectResponse(build_login_url(GITHUB_OAUTH_REDIRECT_URI, state=state))
 
 
 @router.get("/auth/github/callback")
@@ -845,9 +857,13 @@ def auth_github_callback(
 ) -> Any:
     """GitHub 回调：换 token → 建/取用户 → 发会话 → 跳回前端。"""
     from core.config import AUTH_FRONTEND_REDIRECT
+    from api.auth_service import pop_origin
+
+    # 优先跳回"发起登录的那个前端地址"（端口无关），否则用配置默认值
+    _front = pop_origin(state) or AUTH_FRONTEND_REDIRECT
 
     def _back(qs: str) -> RedirectResponse:
-        return RedirectResponse(f"{AUTH_FRONTEND_REDIRECT}/?{qs}")
+        return RedirectResponse(f"{_front}/?{qs}")
 
     token = exchange_code(code)
     if not token:

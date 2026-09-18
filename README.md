@@ -100,7 +100,12 @@ RecoFeed 用**抖音的信息流范式**来做**开源仓库的发现** —— �
 
 ### Windows 一键启动（推荐）
 
-双击项目根目录 **`start-all.bat`** —— 后端 (8000) 与前端 (5173) 各开一个独立窗口。停止用 `stop-all.bat`。
+双击项目根目录 **`start-all.bat`** —— 后端 (8000) 与前端各开一个独立窗口。停止用 `stop-all.bat`。
+
+> ⚠️ **前端端口不是固定 5173**：5173 有时会落在 Windows 保留段（Hyper-V/WSL 动态保留，
+> 开代理/加速器后常见）导致 `EACCES`。所以前端端口支持 `VITE_PORT` 覆盖，且 Vite 会自动往后找
+> 可用端口（`start-all.bat` 也会先探测）。**以 Vite 窗口打印的地址为准。**
+> 登录回跳地址会自动跟随实际端口，不需要改任何配置。
 
 ### 手动启动
 
@@ -119,6 +124,7 @@ python app.py                     # → http://127.0.0.1:8000
 cd frontend
 pnpm install
 pnpm dev                          # → http://localhost:5173
+VITE_PORT=5273 pnpm dev           # 端口被系统保留时换一个（登录回跳会自动跟随）
 ```
 
 **数据集已随仓库提供**（`backend/data/recofeed.seed.db`，3,616 个真实 GitHub 仓库，含向量）。  
