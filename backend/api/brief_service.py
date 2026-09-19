@@ -99,6 +99,42 @@ def _clean(data: Any) -> dict[str, Any]:
     }
 
 
+def _fetch_readme_from_github(full_name: str) -> str | None:
+    """本地没有实质 README → 现场去 GitHub 抓（用户要求："没有 md 直接去 GitHub 现抓"）。
+
+    走 /repos/{full}/readme（Accept: raw 直接返回正文）。
+    令牌：gh CLI（限额 5000/h）；失败退化为匿名（60/h，单次按需抓取也够用）。
+    返回正文或 None（404/网络失败）。
+    """
+    import subprocess as _sp
+
+    global _GH_TOKEN_CACHE
+    if _GH_TOKEN_CACHE is None:
+        try:
+            _GH_TOKEN_CACHE = _sp.run(["gh", "auth", "token"], capture_output=True,
+                                      text=True, timeout=15).stdout.strip() or ""
+        except Exception:
+            _GH_TOKEN_CACHE = ""
+    headers = {"Accept": "application/vnd.github.raw", "User-Agent": "recofeed/1.0"}
+    if _GH_TOKEN_CACHE:
+        headers["Authorization"] = f"Bearer {_GH_TOKEN_CACHE}"
+    try:
+        import requests as _requests
+        # ⚠️ verify=False 是必须的：本机证书链对 api.github.com 验证必挂（见 crawl_service 注释）
+        r = _requests.get(
+            f"https://api.github.com/repos/{full_name}/readme",
+            headers=headers, timeout=20, verify=False,
+        )
+        if r.status_code == 200 and r.text.strip():
+            return r.text[:6000]
+    except Exception:
+        pass
+    return None
+
+
+_GH_TOKEN_CACHE: str | None = None
+
+
 def make_brief(conn: sqlite3.Connection, repo_id: int,
                *, force: bool = False) -> dict[str, Any]:
     """生成（或读取缓存）某个仓库的 AI 速读。返回 {ok, brief, cached, model, reason}。"""
@@ -109,10 +145,31 @@ def make_brief(conn: sqlite3.Connection, repo_id: int,
 
     readme = (r["readme_md"] or "").strip()
     readme_len = len(readme)
+
+    # ⭐ 本地没有实质 README（兜底文本「# 名 + 一句话」）→ 现场去 GitHub 抓真的。
+    #    用户要求："AI 速读如果程序没有发现 md，直接去 GitHub 现抓"。
+    #    抓到后顺手落库（readme_md / 重提标签 / 脱敏），后续卡片与画像都受益。
     if readme_len < 200:
-        # 兜底 README（# 名 + 一句话）没什么可速读的，直接告诉前端别问
-        return {"ok": False, "reason": "README 内容太少，无法速读",
-                "brief": None, "brief_short_readme": True}
+        fetched = _fetch_readme_from_github(r["full_name"])
+        if not fetched or len(fetched.strip()) < 200:
+            return {"ok": False, "reason": "GitHub 上也没有实质 README，无法速读",
+                    "brief": None, "brief_short_readme": True}
+        from quality.redact import redact_secrets
+        from tags.extractor import extract_readme_tags
+        fetched = redact_secrets(fetched)          # 第三方内容，先抹掉别人的密钥
+        try:
+            topics = json.loads(r["topics"] or "[]")
+        except json.JSONDecodeError:
+            topics = []
+        tags = extract_readme_tags(fetched, topk=50, topics=topics, name=r["name"])
+        conn.execute(
+            """UPDATE repos SET readme_md=?, readme_len=?,
+                   tags_json=?, tags_updated_at=datetime('now')
+               WHERE id=?""",
+            (fetched, len(fetched), json.dumps(tags, ensure_ascii=False), repo_id),
+        )
+        readme = fetched
+        readme_len = len(readme)
 
     if not force:
         cached = get_cached(conn, repo_id, readme_len)
