@@ -206,15 +206,35 @@ export function deleteCustomKeyword(
  * keywords 留空 = 使用画像面板保存的自定义关键词。
  * 抓取 + 入库在前台完成（README 后台补齐），超时给足 90s。
  */
+export interface CrawlOptions {
+  /** 最低星数（默认 20） */
+  minStars?: number
+  /** 最高星数（不限则不传） */
+  maxStars?: number
+  /** 语言过滤（如 python / rust） */
+  language?: string
+  /** 排序：stars / updated */
+  sort?: string
+}
+
 export function crawlByKeywords(
   userId: number,
   keywords?: string[],
+  opts?: CrawlOptions,
 ): Promise<CrawlResult> {
+  const body: Record<string, unknown> = {
+    user_id: userId,
+    keywords: keywords ?? [],
+    ...(opts?.minStars !== undefined && { min_stars: opts.minStars }),
+    ...(opts?.maxStars !== undefined && { max_stars: opts.maxStars }),
+    ...(opts?.language && { language: opts.language }),
+    ...(opts?.sort && { sort: opts.sort }),
+  }
   return request(
     '/queue/crawl',
     {
       method: 'POST',
-      body: JSON.stringify({ user_id: userId, keywords: keywords ?? [] }),
+      body: JSON.stringify(body),
     },
     90_000,
   )

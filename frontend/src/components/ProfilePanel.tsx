@@ -87,6 +87,11 @@ const ProfilePanel: FC<Props> = ({
   const [kwBusy, setKwBusy] = useState(false)
   const [crawling, setCrawling] = useState(false)
   const [crawlInfo, setCrawlInfo] = useState<string | null>(null)
+  // ⭐ 爬虫自定义条件（星数范围 / 语言 / 排序）—— 展开后选择，收起时不占空间
+  const [crawlOpts, setCrawlOpts] = useState(false)
+  const [minStars, setMinStars] = useState(20)
+  const [maxStars, setMaxStars] = useState<number | ''>('')
+  const [crawlLang, setCrawlLang] = useState('')
 
   /** AI 意图解析：把描述变成关键词（并加入列表 → 驱动爬虫） */
   const runIntent = useCallback(async (): Promise<void> => {
@@ -216,7 +221,11 @@ const ProfilePanel: FC<Props> = ({
     setCrawling(true)
     setCrawlInfo(null)
     try {
-      const r = await crawlByKeywords(userId)
+      const r = await crawlByKeywords(userId, undefined, {
+        minStars,
+        maxStars: maxStars === '' ? undefined : Number(maxStars),
+        language: crawlLang || undefined,
+      })
       setCrawlInfo(
         `抓到 ${r.found} 个候选 · 新入库 ${r.new_repos} 个 · 入队 ${r.enqueued} 个 —— 回去刷 Feed 就能看到`,
       )
@@ -671,6 +680,51 @@ const ProfilePanel: FC<Props> = ({
                   </button>
                 </span>
               ))}
+            </div>
+          )}
+
+          {/* ⭐ 爬虫条件（可折叠） */}
+          <button
+            className="flex items-center gap-1 text-[11px] text-ink-faint hover:text-ink-muted
+                       transition-colors mt-3"
+            onClick={() => setCrawlOpts((v) => !v)}
+          >
+            {crawlOpts ? '▾ 收起爬虫条件' : '▸ 爬虫条件（星数 / 语言）'}
+          </button>
+          {crawlOpts && (
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+              <label className="flex items-center gap-1 text-[11px] text-ink-muted">
+                星数
+                <input
+                  type="number"
+                  value={minStars}
+                  onChange={(e) => setMinStars(Number(e.target.value) || 20)}
+                  className="w-14 bg-canvas border border-hairline rounded-[4px] px-1.5 py-0.5
+                             text-[12px] text-ink outline-none"
+                  min={0}
+                />
+                ~
+                <input
+                  type="number"
+                  value={maxStars}
+                  onChange={(e) => setMaxStars(e.target.value === '' ? '' : Number(e.target.value))}
+                  placeholder="不限"
+                  className="w-14 bg-canvas border border-hairline rounded-[4px] px-1.5 py-0.5
+                             text-[12px] text-ink outline-none"
+                  min={0}
+                />
+              </label>
+              <select
+                value={crawlLang}
+                onChange={(e) => setCrawlLang(e.target.value)}
+                className="bg-canvas border border-hairline rounded-[4px] px-1.5 py-0.5
+                           text-[12px] text-ink outline-none"
+              >
+                <option value="">不限语言</option>
+                {['python','typescript','javascript','rust','go','c++','java','c','swift','julia'].map((l) => (
+                  <option key={l} value={l}>{l}</option>
+                ))}
+              </select>
             </div>
           )}
 
