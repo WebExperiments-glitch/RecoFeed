@@ -246,6 +246,8 @@ const ProfilePanel: FC<Props> = ({
   if (!open) return null
 
   const topics: ProfileItem[] = profile?.interests ?? []
+  /** 兴趣方向（细粒度推荐池）：AI 理解成"你在哪些方向"，比 50 个散标签直观 */
+  const domains = profile?.domains ?? []
   const langs = profile?.languages ?? []
   const maxW = topics.length > 0 ? topics[0].weight : 1
 
@@ -685,6 +687,44 @@ const ProfilePanel: FC<Props> = ({
             </p>
           )}
         </div>
+
+        {/* ── 兴趣方向（细粒度推荐池）──
+            评测："建立更细维度的推荐池（AI-应用层/AI-基础设施/AI-音视频），别让 ai 一个泛标签背锅"。
+            方向由 dict/domain_terms.txt 定义，分数 = 成员标签权重之和。 */}
+        {domains.length > 0 && (
+          <div className="mt-6">
+            <div className="text-[12px] font-semibold text-ink-muted tracking-wide mb-3">
+              兴趣方向（{domains.length}）
+            </div>
+            <div className="space-y-2">
+              {domains.map((d) => {
+                const max = domains[0]?.score || 1
+                return (
+                  <div key={d.key} className="card p-3.5">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-[13.5px] font-medium text-ink">{d.name}</span>
+                      <div className="flex-1 h-1.5 rounded-full bg-parchment overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-accent"
+                          style={{ width: `${Math.round((d.score / max) * 100)}%` }}
+                        />
+                      </div>
+                      <span className="text-[11px] text-ink-faint shrink-0">{d.score.toFixed(2)}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {d.tags.slice(0, 6).map((t) => (
+                        <span key={t.tag} className="chip h-5.5 text-[10.5px] bg-parchment
+                                                     text-ink-muted border border-hairline">
+                          {t.tag}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* ── 兴趣标签 ── */}
         <div className="mt-6">

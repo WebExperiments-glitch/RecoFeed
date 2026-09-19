@@ -32,6 +32,17 @@ export interface RepoStats {
 /** 信息流分档：all=全部 / hot=热门（≥1000 星）/ gem=遗珠（<1000 星） */
 export type FeedMode = 'all' | 'hot' | 'gem'
 
+/** 兴趣方向（细粒度推荐池：把散标签聚成方向） */
+export interface ProfileDomain {
+  /** 方向中文名（如 语音合成 / TTS） */
+  name: string
+  /** 方向英文 key（如 speech） */
+  key: string
+  /** 方向分 = 成员标签权重之和 */
+  score: number
+  tags: { tag: string; weight: number }[]
+}
+
 /** AI 项目速读（README → 结构化简介） */
 export interface RepoBrief {
   /** 一句话定位（≤40 字） */
@@ -60,6 +71,8 @@ export interface FeedItem {
   stats?: RepoStats
   /** AI 速读（仅当此前生成过、命中缓存时才随 feed 下发） */
   brief?: RepoBrief
+  /** 兴趣方向（细粒度推荐池） */
+  domains?: ProfileDomain[]
   language: string | null
   stars: number
   topics: string[]
@@ -247,6 +260,8 @@ export interface UserProfile {
   /** 画像数据是否还不足以形成有效推荐 */
   cold_start: boolean
   updated_at?: string
+  /** 兴趣方向（细粒度推荐池） */
+  domains?: ProfileDomain[]
 }
 
 // ------------------------------------------------------------------ 自定义关键词 & 爬虫
