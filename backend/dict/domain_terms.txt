@@ -60,3 +60,9 @@ agent: workflow orchestration 编排 智能体
 # ── 安全 / 隐私 ──
 security: security auth oauth jwt encryption zero-trust e2ee
 security: blocklist tracker 隐私 安全
+
+# ── 补充（2026-09-18，来自语料库高频标签实测）──
+speech: text-to-speech indextts cosyvoice fish-speech gpt-sovits realtime-voice speech-to-text
+llm: openai inference inference-engine local-inference local-llm edge-inference
+agent: ai-agents agents agentic agentic-ai agent-framework autonomous-agents multi-agent
+training: pytorch machine-learning deep-learning model-training

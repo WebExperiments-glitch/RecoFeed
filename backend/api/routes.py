@@ -759,12 +759,22 @@ def user_profile(user_id: int = Query(1)) -> dict[str, Any]:
         if top_w > 0:
             clean = [it for it in clean if float(it["weight"]) >= 0.25 * top_w]
         interests = clean[:24]
+
+        # ⭐ 兴趣方向（细粒度推荐池）：把散标签聚成方向 ——
+        #    用户的第一印象应该是"我在语音合成/Agent 方向"，而不是"我喜欢 ai"。
+        #    这也是评测说的"建立更细维度的推荐池"的第一步（方向 → 成员标签 → 补货查询）。
+        try:
+            from quality.domains import domain_scores
+            _dw = {it["tag"]: float(it["weight"]) for it in interests}
+            domains = domain_scores(_dw)
+        except Exception:  # noqa: BLE001
+            domains = []
     except Exception:
         pass
     languages = _parse(row["top_languages"])
 
     return {
-        "user_id": user_id,
+        "domains": domains if True else [],
         "interests": interests,
         "languages": languages,
         "events": n_events,
