@@ -155,15 +155,33 @@ def get_user_keywords(conn: sqlite3.Connection, user_id: int) -> list[str]:
 
 # ---------------------------------------------------------------- Scrapling 抓取
 
-def _gh_search(keyword: str, per_page: int) -> list[dict[str, Any]]:
-    """用 Scrapling Fetcher 搜 GitHub。任何失败返回空列表（不拖垮整次抓取）。"""
+def _gh_search(keyword: str, per_page: int, *,
+               min_stars: int = 20, max_stars: int | None = None,
+               language: str | None = None,
+               sort: str | None = None) -> list[dict[str, Any]]:
+    """用 Scrapling Fetcher 搜 GitHub。任何失败返回空列表（不拖垮整次抓取）。
+
+    ⭐ 支持自定义条件（用户提的"大幅升级"）：
+       min_stars / max_stars → 星数区间（如 50~999 = 遗珠档）
+       language              → 语言过滤（如 python）
+       sort                  → 排序（stars / updated / best-match）
+    """
+    q = keyword
+    # 星数：调用方没指定时用默认下限
+    if min_stars != 20 or max_stars is not None:
+        if max_stars is not None:
+            q += f" stars:{min_stars}..{max_stars}"
+        else:
+            q += f" stars:>{min_stars}"
+    if language:
+        q += f" language:{language}"
+    params: dict[str, Any] = {"q": q, "per_page": per_page}
+    if sort:
+        params["sort"] = sort
     try:
         page = Fetcher.get(
             SEARCH_URL,
-            params={
-                "q": f"{keyword} stars:>20",
-                "per_page": per_page,
-            },
+            params=params,
             timeout=25,
             verify=False,   # 本机证书链对 GitHub 验证必挂，只读公开数据
         )
@@ -384,10 +402,16 @@ def crawl_keywords(
     keywords: list[str] | None = None,
     per_keyword: int = 8,
     background_enrich=None,     # fastapi BackgroundTasks，可空
+    *,
+    min_stars: int = 20,
+    max_stars: int | None = None,
+    language: str | None = None,
+    sort: str | None = None,
 ) -> dict[str, Any]:
     """按关键词驱动爬虫：抓 GitHub → 入库 → 直接入队。
 
     keywords 为空时使用用户保存的自定义关键词。
+    min_stars / max_stars / language / sort → 自定义搜索条件（用户要求的大幅升级）。
     """
     global _last_crawl_at
 
@@ -409,7 +433,9 @@ def crawl_keywords(
     details: list[dict[str, Any]] = []
     rows: list[dict[str, Any]] = []
     for kw in keywords:
-        items = _gh_search(kw, per_keyword)
+        items = _gh_search(kw, per_keyword,
+                           min_stars=min_stars, max_stars=max_stars,
+                           language=language, sort=sort)
         kept = []
         for it in items:
             r = _normalize(it)

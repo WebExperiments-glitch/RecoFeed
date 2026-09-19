@@ -140,6 +140,11 @@ class CrawlIn(BaseModel):
     keywords: list[str] = Field(default_factory=list)
     # 每个关键词抓几个候选（GitHub search per_page）
     per_keyword: int = Field(8, ge=1, le=15)
+    # ⭐ 自定义搜索条件（爬虫大幅升级）
+    min_stars: int = Field(20, ge=0, description="最低星数")
+    max_stars: int | None = Field(None, ge=0, description="最高星数（空=不限）")
+    language: str | None = Field(None, description="语言过滤（如 python / rust）")
+    sort: str | None = Field(None, description="排序：stars / updated / 空=best-match")
 
 
 class PatIn(BaseModel):
@@ -896,6 +901,10 @@ def crawl_by_keywords(
                 keywords=p.keywords or None,
                 per_keyword=p.per_keyword,
                 background_enrich=background_tasks,
+                min_stars=p.min_stars,
+                max_stars=p.max_stars,
+                language=p.language,
+                sort=p.sort,
             )
     except ValueError as e:
         raise HTTPException(status_code=429 if "频繁" in str(e) else 400,
