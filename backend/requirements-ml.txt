@@ -11,7 +11,7 @@
 numpy>=1.26
 
 # --- 物品塔：bge-small-zh 句向量 ---
-sentence-transformers>=3.0.0
+sentence-transformers>=3.4.1
 # 从魔搭下载模型（国内不走 HuggingFace）
 modelscope>=1.15.0
 
