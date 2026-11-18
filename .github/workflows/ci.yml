@@ -26,7 +26,7 @@ jobs:
       security: ${{ steps.filter.outputs.security }}
       data: ${{ steps.filter.outputs.data }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -55,7 +55,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.backend == 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
@@ -75,7 +75,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.frontend == 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v4
         with:
           version: 10
@@ -93,7 +93,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.security == 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # 密钥扫描要覆盖全部历史，浅克隆会漏掉"已删除但仍在历史里"的 key
           fetch-depth: 0
@@ -126,7 +126,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.data == 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
@@ -146,7 +146,7 @@ jobs:
     if: ${{ always() && !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: actions/setup-python@v5
