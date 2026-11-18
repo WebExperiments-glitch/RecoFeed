@@ -32,8 +32,6 @@ import re
 import sqlite3
 
 from core.config import (
-    SEARCH_DEFAULT_LIMIT,
-    SEARCH_MIN_KEEP,
     SEARCH_MIN_SCORE_RATIO,
     SEARCH_QUALITY_WEIGHT,
     SEARCH_SUGGEST_MIN_DF,
@@ -255,7 +253,6 @@ def _match_score(repo: dict, terms: list[str], qtags: dict[str, float],
     if not terms:
         return 0.0, [], 0.0
 
-    owner = repo["owner"].lower()
     name = repo["name"].lower()
     full = repo["full_name"].lower()
     desc = repo["description"].lower()
@@ -669,7 +666,7 @@ def suggest(conn: sqlite3.Connection, prefix: str = "",
         return [x for x in items if p in str(x[0]).lower()][:limit]
 
     return {
-        "languages": [x for x in _f([(l, 0) for l in langs])],
+        "languages": [x for x in _f([(lang, 0) for lang in langs])],
         "tags": _f(popular_tags),
         "topics": _f(top_topics),
     }

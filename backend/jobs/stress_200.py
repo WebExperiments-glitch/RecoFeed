@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from db.connection import connect
 from feed import queue as Q
-from feed.service import get_feed, refill_queue
+from feed.service import get_feed
 
 USER = 1
 TOTAL = 200            # 要刷的总条数
@@ -243,12 +243,12 @@ def run(conn) -> None:
     print(f"    非 AI        {u_total - u_ai:>3} 个  "
           f"{(u_total - u_ai) / u_total:.1%}")
 
-    print(f"\n  语音/RVC 方向命中明细：")
+    print("\n  语音/RVC 方向命中明细：")
     for it, a, r in rvc_hit[:12]:
         print(f"    {it['full_name']:<42} ★{it['stars']:<7} {r[:4]}")
 
     if neither:
-        print(f"\n  完全非 AI 的（抽样 8 个）：")
+        print("\n  完全非 AI 的（抽样 8 个）：")
         for it in neither[:8]:
             print(f"    {it['full_name']:<42} ★{it['stars']}")
 

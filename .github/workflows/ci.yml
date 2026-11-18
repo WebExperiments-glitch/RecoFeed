@@ -1,0 +1,170 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ------------------------------------------------------------------
+  # 先判断改了哪一块：只跑受影响区域的分区闸门，避免改文档也装一遍 torch
+  # ------------------------------------------------------------------
+  changes:
+    name: 变更范围
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      security: ${{ steps.filter.outputs.security }}
+      data: ${{ steps.filter.outputs.data }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - 'pyproject.toml'
+              - 'scripts/ci/**'
+              - '.github/workflows/ci.yml'
+            frontend:
+              - 'frontend/**'
+              - '.github/workflows/ci.yml'
+            security:
+              - '**'
+            data:
+              - 'backend/data/**'
+              - 'backend/tests/test_dataset.py'
+              - 'docs/schema.sql'
+
+  # ------------------------------------------------------------------
+  # 分区闸门：改哪儿跑哪儿
+  # ------------------------------------------------------------------
+  backend_gate:
+    name: 闸门 · 后端
+    needs: changes
+    if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.backend == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+            backend/requirements-ml.txt
+      - name: 安装后端依赖
+        run: python -m pip install -r backend/requirements-dev.txt
+      - name: 后端闸门
+        run: python scripts/ci/gate.py backend
+
+  frontend_gate:
+    name: 闸门 · 前端
+    needs: changes
+    if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.frontend == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: 前端闸门
+        run: python scripts/ci/gate.py frontend
+
+  security_gate:
+    name: 闸门 · 安全
+    needs: changes
+    if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.security == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # 密钥扫描要覆盖全部历史，浅克隆会漏掉"已删除但仍在历史里"的 key
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: 安装审计工具
+        run: python -m pip install pip-audit
+      - name: 安全闸门
+        run: python scripts/ci/gate.py security
+      - name: 上传密钥扫描报告
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: secret-scan-report
+          path: reports/secret-scan.txt
+          if-no-files-found: ignore
+
+  data_gate:
+    name: 闸门 · 数据
+    needs: changes
+    if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.data == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+      - name: 安装后端依赖
+        run: python -m pip install -r backend/requirements-dev.txt
+      - name: 数据闸门
+        run: python scripts/ci/gate.py data
+
+  # ------------------------------------------------------------------
+  # 全量闸门：所有分区闸门通过（或未触发）后，再完整跑一遍
+  # ------------------------------------------------------------------
+  full_gate:
+    name: 闸门 · 全量
+    needs: [changes, backend_gate, frontend_gate, security_gate, data_gate]
+    if: ${{ always() && !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: 安装全部依赖
+        run: python -m pip install -r backend/requirements-dev.txt
+      - name: 全量闸门
+        run: python scripts/ci/gate.py all

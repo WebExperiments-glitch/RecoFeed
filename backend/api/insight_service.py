@@ -27,10 +27,8 @@ from typing import Any
 
 from api.translate_service import (
     _chat,
-    _check_rate_limit,
     _mark_model_429,
     _pick_model,
-    _quota_reject_reason,
     _record_usage,
 )
 

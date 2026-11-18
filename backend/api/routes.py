@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -72,7 +73,6 @@ from api.search_service import hot as search_hot
 from api.search_service import search as search_repos
 from api.search_service import suggest as search_suggest
 from core.config import (
-    QUEUE_TARGET_SIZE,
     COLD_START_MIN_TAGS,
     EVENT_WEIGHTS,
     SEARCH_DEFAULT_LIMIT,
@@ -85,6 +85,11 @@ from feed.service import refill_queue
 from pool.state_machine import ensure_pool, record_event
 
 router = APIRouter(prefix="/api")
+
+
+def _norm_text(text: str | None) -> str:
+    """压成纯字母数字形态，用于判断摘要是否只是仓库名/简介的复读。"""
+    return re.sub(r"[\s\W_]+", "", (text or "").lower())
 
 
 # ------------------------------------------------------------------ 模型
@@ -278,14 +283,13 @@ def get_feed(
                     #    只有仓库名"biliboard-opensource"，既无信息量又像 bug）。
                     #    规则：太短（<50 字）或与仓库名/简介实质相同 → 视为无摘要。
                     if ex:
-                        import re as _re
                         # ⚠️ 用 r.keys() 兜底：曾经因为 SELECT 漏了 name 导致
                         #    r["name"] 抛 sqlite3.Row 的 "No item with that key"，
                         #    整块富化被 except 吞掉 → 所有卡片 stats/摘要全空。
                         #    取不到的字段退化为空串即可，不能让一个可选字段炸掉整块逻辑。
                         _nm_raw = r["name"] if "name" in r.keys() else ""
-                        _norm = lambda t: _re.sub(r"[\s\W_]+", "", (t or "").lower())
-                        _ex, _nm, _ds = _norm(ex), _norm(_nm_raw), _norm(r["description"])
+                        _ex, _nm, _ds = (_norm_text(ex), _norm_text(_nm_raw),
+                                         _norm_text(r["description"]))
                         if len(ex) < 50 or _ex in (_nm, _ds) or _ex == (_nm + _ds):
                             ex = ""
                     # 概览与打分：桌面端右列用它填满版面（不依赖 README，
@@ -934,7 +938,7 @@ def auth_github_login(
     import secrets as _secrets
 
     from core.config import AUTH_CONFIGURED, GITHUB_OAUTH_REDIRECT_URI
-    from api.auth_service import build_login_url, remember_origin
+    from api.auth_service import remember_origin
     if not AUTH_CONFIGURED:
         raise HTTPException(
             status_code=400,

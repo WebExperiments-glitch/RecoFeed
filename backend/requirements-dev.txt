@@ -1,0 +1,10 @@
+# RecoFeed 开发/质量闸门依赖
+# 安装：pip install -r backend/requirements-dev.txt
+
+-r requirements.txt
+
+# --- 静态检查 ---
+ruff>=0.14,<1
+
+# --- 依赖漏洞审计 ---
+pip-audit>=2.10,<3

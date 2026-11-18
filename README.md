@@ -8,6 +8,8 @@
 
 ![React](https://img.shields.io/badge/React-19-0066cc.svg)
 
+[![CI](https://github.com/WebExperiments-glitch/RecoFeed/actions/workflows/ci.yml/badge.svg)](https://github.com/WebExperiments-glitch/RecoFeed/actions/workflows/ci.yml)
+
 ---
 
 ## 这是什么
@@ -102,6 +104,9 @@ RecoFeed 用**抖音的信息流范式**来做**开源仓库的发现** —— �
 
 双击项目根目录 **`start-all.bat`** —— 后端 (8000) 与前端各开一个独立窗口。停止用 `stop-all.bat`。
 
+> 脚本会自动探测 Python（优先 `backend\.venv`，其次 PATH 里已装好后端依赖的 `python` / `py`），不再依赖某台机器的绝对路径。
+> 首次运行前仍需先装好前后端依赖（见下方手动启动）。
+
 > ⚠️ **前端端口不是固定 5173**：5173 有时会落在 Windows 保留段（Hyper-V/WSL 动态保留，
 > 开代理/加速器后常见）导致 `EACCES`。所以前端端口支持 `VITE_PORT` 覆盖，且 Vite 会自动往后找
 > 可用端口（`start-all.bat` 也会先探测）。**以 Vite 窗口打印的地址为准。**
@@ -115,6 +120,7 @@ cd backend
 python -m venv .venv
 .venv\Scripts\activate            # macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
+pip install -r requirements-ml.txt   # 可选：本地向量 + 个人模型（不装会降级为 LSA 兜底）
 
 python app.py                     # → http://127.0.0.1:8000
 ```
@@ -141,6 +147,12 @@ python backend/jobs/retag.py                              # 重刷标签（自�
 ---
 
 ## 本地模型与个性化
+
+先装本地模型依赖（`numpy` / `sentence-transformers` / `modelscope` / `torch`）：
+
+```bash
+pip install -r backend/requirements-ml.txt
+```
 
 embedding 模型首次使用时自动从**魔搭**下载（约 180MB，缓存在 `backend/models/`，不入库）：
 
@@ -200,11 +212,37 @@ python backend/jobs/train_personal_model.py --user <用户id>
 
 ---
 
+## 质量闸门（CI）
+
+所有检查都由 `scripts/ci/gate.py` 统一驱动 —— 本地与 GitHub Actions 跑的是同一套命令。
+
+| 闸门 | 触发范围 | 内容 |
+| --- | --- | --- |
+| `backend` | `backend/**` | ruff 静态检查 + pytest（打分 / 数据集 / 健康检查） |
+| `frontend` | `frontend/**` | 锁文件安装 + tsc 类型检查 + vite 生产构建 |
+| `security` | 所有变更 | 密钥扫描（工作区 + **全部历史**）+ pip-audit + pnpm 生产依赖审计 |
+| `data` | `backend/data/**` | SQLite 完整性 / 语料规模 / 令牌已清空 / 运行库未误提交 |
+
+**改了哪个区域只跑哪个闸门；分区闸门全部通过后，再跑一次全量闸门**。另外：
+
+- **CodeQL**：每次 PR / 每周做 Python 与 TypeScript 静态安全分析
+- **Dependabot**：每周提依赖升级 PR（minor/patch 自动成组）
+
+本地复现：
+
+```bash
+pip install -r backend/requirements-dev.txt
+python scripts/ci/gate.py backend     # backend / frontend / security / data / all
+```
+
+---
+
 ## 项目结构
 
 ```
 RecoFeed/
 ├── start-all.bat / stop-all.bat       # Windows 一键启停
+├── .github/workflows/                 # ⭐ CI：分区闸门 + 全量闸门 + CodeQL
 ├── docs/
 │   ├── API.md                         # ⭐ 完整 API 参考（40+ 接口）
 │   ├── simulation_report.md           # ⭐ 机制有效性验证报告（自动生成）
@@ -212,6 +250,7 @@ RecoFeed/
 │   ├── schema.sql                     # 数据库 Schema
 │   └── 调研报告 / 推流引擎设计 / 算法实现规格（.md + .html）
 ├── scripts/
+│   ├── ci/gate.py                     # ⭐ 统一质量闸门（本地 / CI 共用）
 │   ├── export_dataset.py              # ⭐ 导出脱敏数据集快照（提交前必跑）
 │   └── sanitize_dataset.py            # 原地脱敏运行库（应急）
 ├── backend/
@@ -230,6 +269,7 @@ RecoFeed/
 │   │   ├── rerank.py                  #   本地重排（融合排序 + 硬门槛 + 排除已收藏）
 │   │   └── sklearn_lite.py            #   无 torch 环境的 LSA 兜底
 │   ├── recall/ rank/ pool/ tags/ user_profile/
+│   ├── tests/                         # ⭐ 打分 / 数据集 / 健康检查回归
 │   ├── dict/                          # 技术词典 / 噪声表 / 领域词 / 自建技术词表
 │   ├── data/recofeed.seed.db          # ⭐ 数据集（3,616 仓库，随仓库提供）
 │   └── jobs/

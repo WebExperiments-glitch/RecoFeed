@@ -235,7 +235,7 @@ def build_feed(
     # ── 搜索干预 ──
     si: SearchIntervention | None = None
     if search_query:
-        from tags.extractor import display_tags, extract_query_tags
+        from tags.extractor import extract_query_tags
         qtags = extract_query_tags(search_query)
         if qtags:
             si = SearchIntervention(tags=qtags)

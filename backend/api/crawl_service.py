@@ -369,11 +369,12 @@ def _bg_enrich_readmes(repo_ids: list[int]) -> None:
 
     rng = random.Random(42)
     with get_conn() as conn:
-        for (rid, _f, _b, topics), (_r, md) in zip(todo, fetched):
+        for (rid, full_name, _b, topics), (_r, md) in zip(todo, fetched):
             if not md:
                 continue
             tags = extract_readme_tags(md, topk=50,
-                                       topics=r["topics"], name=r["name"])
+                                       topics=topics,
+                                       name=full_name.split("/")[-1])
             for t in topics[:8]:
                 t = str(t).strip().lower()
                 if t and len(t) > 1 and t not in tags:

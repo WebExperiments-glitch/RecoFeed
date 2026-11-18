@@ -29,7 +29,6 @@ import json
 from tags.extractor import display_tags
 import sqlite3
 import uuid
-from datetime import datetime, timezone
 
 from core.config import (
     QUEUE_LOW_WATERMARK,

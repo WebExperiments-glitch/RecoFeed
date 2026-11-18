@@ -1,0 +1,19 @@
+# RecoFeed 本地模型依赖（可选）
+#
+# 安装：pip install -r backend/requirements-ml.txt
+#
+# 不装也能启动：推荐链路会自动降级为 LSA 向量兜底，只是个性化效果变差。
+# 想省下载体积（不装 CUDA 版 torch）先单独装 CPU 版：
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+#   pip install -r backend/requirements-ml.txt
+
+# --- 数值计算（向量 / 用户塔 / LSA 兜底）---
+numpy>=1.26
+
+# --- 物品塔：bge-small-zh 句向量 ---
+sentence-transformers>=3.0.0
+# 从魔搭下载模型（国内不走 HuggingFace）
+modelscope>=1.15.0
+
+# --- 用户塔：本地 MLP 微调 ---
+torch>=2.0.0

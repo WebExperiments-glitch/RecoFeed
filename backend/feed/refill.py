@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import dataclass, field
+from typing import Any
 
 from core.config import (
     REFILL_MAX_QUERIES,
@@ -213,9 +214,9 @@ def _self_tags_of(row) -> set[str]:
        就按"技术方向词"处理，不再当项目名。
     """
     names: set[str] = set()
-    for field in ("name", "full_name", "owner"):
+    for fname in ("name", "full_name", "owner"):
         try:
-            raw = row[field]
+            raw = row[fname]
         except (IndexError, KeyError):
             continue
         if not raw:
@@ -450,7 +451,7 @@ def pick_from_local_pool(
     ).fetchall()
 
     wanted = set(t.lower() for t in plan.queries)
-    wanted_langs = set(l.lower() for l in plan.languages)
+    wanted_langs = set(lang.lower() for lang in plan.languages)
 
     scored: list[tuple[float, int]] = []
     cooled: list[tuple[float, int]] = []      # 冷却期内，仅作备用

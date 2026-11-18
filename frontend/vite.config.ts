@@ -17,7 +17,6 @@ export default defineConfig({
     //    这里允许 --port 覆盖，且 strictPort=false 时自动往后找可用端口。
     port: Number(process.env.VITE_PORT ?? 5173),
     strictPort: false,
-    strictPort: true,
     // 后端跑在 8000，前端直连会跨域。开发期用代理，
     // 生产部署时 nginx 反代同一个前缀即可，前端代码不用改。
     proxy: {

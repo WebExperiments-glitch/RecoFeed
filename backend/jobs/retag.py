@@ -104,7 +104,7 @@ def main() -> None:
 
     print(f"{'[dry-run] ' if args.dry_run else ''}重刷完成：{changed}/{total} 个仓库标签有变化")
     if removed:
-        print(f"剔除的噪声标签 Top15（出现在多少仓库里）：")
+        print("剔除的噪声标签 Top15（出现在多少仓库里）：")
         for tag, n in removed.most_common(15):
             print(f"   {tag:<18} {n} 个仓库")
     if not args.dry_run:

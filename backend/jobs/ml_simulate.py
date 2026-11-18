@@ -44,7 +44,6 @@ _PROJECT_DIR = _BACKEND_DIR.parent
 if str(_BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(_BACKEND_DIR))
 
-from core.config import DB_PATH  # noqa: E402
 
 API = "http://127.0.0.1:8000/api"
 S = requests.Session()
@@ -462,11 +461,11 @@ def write_report(result: dict, path: Path) -> None:
 
     # ---------------- 一、实验设置
     L.append("## 一、实验设置\n")
-    L.append(f"| 项 | 值 |\n|---|---|")
+    L.append("| 项 | 值 |\n|---|---|")
     L.append(f"| 轮数 × 每轮卡片 | {cfg['rounds']} × {cfg['page']} |")
     L.append(f"| 模拟用户 | user_id = {cfg['user_id']}（独立账号，不污染真实用户画像） |")
     L.append(f"| 好奇心比例 | {cfg['curiosity']:.0%}（模拟人类偶尔被意外内容吸引） |")
-    L.append(f"| 语料库 | 数据库内全部仓库（本实验时 258 个真实 GitHub 项目） |")
+    L.append("| 语料库 | 数据库内全部仓库（本实验时 258 个真实 GitHub 项目） |")
     L.append("")
     L.append("数字人类的真实兴趣权重：\n")
     L.append("| 维度 | 权重 | 维度 | 权重 |\n|---|---|---|---|")

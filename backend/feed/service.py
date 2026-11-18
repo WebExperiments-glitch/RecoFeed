@@ -27,7 +27,7 @@ from core.config import (
     QUEUE_TARGET_SIZE,
 )
 from feed import queue as Q
-from feed.refill import build_fetch_plan, pick_from_local_pool, plan_summary
+from feed.refill import build_fetch_plan, pick_from_local_pool
 
 
 # 上次补货时间（进程内，避免短时间内反复触发）
@@ -138,7 +138,7 @@ def _score_picked(conn: sqlite3.Connection, user_id: int,
         return []
 
     from api.feed_service import load_penalties, load_profile
-    from rank.scorer import Candidate, score_candidate
+    from rank.scorer import score_candidate
     from recall.channels import _row_to_candidate
 
     profile = load_profile(conn, user_id, auto_rebuild=False)

@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import time
 from typing import Any
 
 from api.insight_service import _llm_json  # 复用级联调用 + JSON 解析

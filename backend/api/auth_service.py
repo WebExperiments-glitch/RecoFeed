@@ -22,7 +22,6 @@ import json
 import math
 import secrets
 import sqlite3
-import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import urlencode
@@ -30,9 +29,6 @@ from urllib.parse import urlencode
 import requests
 
 from core.config import (
-    AUTH_CONFIGURED,
-    AUTH_FRONTEND_REDIRECT,
-    AUTH_SECRET,
     GITHUB_API,
     GITHUB_CLIENT_ID,
     GITHUB_CLIENT_SECRET,

@@ -12,6 +12,7 @@ node_modules/
 dist/
 .vite/
 *.local
+*.tsbuildinfo
 
 # 数据库
 *.db
