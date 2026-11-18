@@ -114,7 +114,7 @@ jobs:
         run: python scripts/ci/gate.py security
       - name: 上传密钥扫描报告
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: secret-scan-report
           path: reports/secret-scan.txt
