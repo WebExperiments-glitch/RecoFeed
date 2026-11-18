@@ -19,6 +19,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -32,7 +33,8 @@ class GateError(RuntimeError):
 
 
 def _run(cmd: list[str], cwd: Path | None = None,
-         *, capture: bool = False) -> subprocess.CompletedProcess:
+         *, capture: bool = False,
+         env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
     cwd = cwd or ROOT
     where = cwd.relative_to(ROOT) if cwd != ROOT else Path(".")
     print(f"\n▶ {' '.join(cmd)}   (cwd={where})", flush=True)
@@ -42,6 +44,7 @@ def _run(cmd: list[str], cwd: Path | None = None,
     proc = subprocess.run(
         subprocess.list2cmdline(cmd) if shell else cmd,
         cwd=cwd, text=True, capture_output=capture, shell=shell,
+        env={**os.environ, **env} if env else None,
     )
     if capture:
         out = (proc.stdout or "") + (proc.stderr or "")
@@ -50,6 +53,24 @@ def _run(cmd: list[str], cwd: Path | None = None,
     if proc.returncode != 0:
         raise GateError(f"命令失败（exit {proc.returncode}）：{' '.join(cmd)}")
     return proc
+
+
+def _run_retry(cmd: list[str], cwd: Path | None = None,
+               attempts: int = 3, delay: float = 3.0,
+               env: dict[str, str] | None = None) -> None:
+    """网络型工具（审计）失败时重试，避免一次 IncompleteRead 就判闸门失败。"""
+    last: GateError | None = None
+    for i in range(1, attempts + 1):
+        try:
+            _run(cmd, cwd=cwd, env=env)
+            return
+        except GateError as exc:
+            last = exc
+            if i < attempts:
+                print(f"  ⚠ 第 {i} 次失败，{delay:.0f}s 后重试：{exc}", flush=True)
+                time.sleep(delay)
+    assert last is not None
+    raise last
 
 
 def _require_tool(name: str) -> None:
@@ -87,8 +108,11 @@ def gate_security() -> None:
     _run([sys.executable, "scripts/check_secrets.py"])
 
     _require_module("pip_audit", "pip install -r backend/requirements-dev.txt")
-    _run([sys.executable, "-m", "pip_audit",
-          "-r", "backend/requirements.txt"])
+    # ⚠️ pip-audit 会建临时 venv 复现依赖树。本机 pip 缓存里可能留着半截文件
+    #    （IncompleteRead），禁用缓存后重跑即可，不能把它算成"有漏洞"。
+    _run_retry([sys.executable, "-m", "pip_audit",
+                "-r", "backend/requirements.txt"],
+               env={"PIP_NO_CACHE_DIR": "1"})
 
     if os.getenv("RECOFEED_SKIP_AUDIT") == "1":
         print("⚠ RECOFEED_SKIP_AUDIT=1，跳过 npm 依赖审计")
@@ -96,9 +120,9 @@ def gate_security() -> None:
         _require_tool("pnpm")
         # 只审计生产依赖：tailwind 等构建期传递依赖的告警不阻塞发版，
         # 但仍会在全量闸门里由 Dependabot 跟踪升级。
-        _run(["pnpm", "audit", "--prod",
-              "--registry", NPM_AUDIT_REGISTRY,
-              "--audit-level", "high"], cwd=FRONTEND)
+        _run_retry(["pnpm", "audit", "--prod",
+                    "--registry", NPM_AUDIT_REGISTRY,
+                    "--audit-level", "high"], cwd=FRONTEND)
 
 
 def gate_data() -> None:
