@@ -5,7 +5,11 @@ updates:
     directory: /backend
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
+    ignore:
+      # 大版本升级（torch 3 / fastapi 1…）走人工评估，避免自动 PR 直接打红闸门
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       python-minor-patch:
         patterns: ["*"]
@@ -15,7 +19,11 @@ updates:
     directory: /frontend
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
+    ignore:
+      # Tailwind 4 / TypeScript 7 这类大版本不能自动合，必须人工迁移
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       frontend-minor-patch:
         patterns: ["*"]
@@ -25,4 +33,4 @@ updates:
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
