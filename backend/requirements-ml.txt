@@ -8,7 +8,7 @@
 #   pip install -r backend/requirements-ml.txt
 
 # --- 数值计算（向量 / 用户塔 / LSA 兜底）---
-numpy>=1.26
+numpy>=2.5.4
 
 # --- 物品塔：bge-small-zh 句向量 ---
 sentence-transformers>=3.0.0
