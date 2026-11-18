@@ -4,7 +4,7 @@
 -r requirements.txt
 
 # --- 静态检查 ---
-ruff>=0.14,<1
+ruff>=0.17.5,<1
 
 # --- 依赖漏洞审计 ---
 pip-audit>=2.10,<3
